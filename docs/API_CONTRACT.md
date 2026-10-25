@@ -19,6 +19,8 @@ Base path `/api`. Every request except health carries `Authorization: Bearer <su
 | GET | `/api/me` | `{ id, full_name, role, branch, semester }` |
 | GET | `/api/courses` | `[{ id, code, name }]` |
 | GET | `/api/courses/:id/topics` | `[{ id, parent_id, unit, name, position }]` |
+| POST | `/api/courses/:id/enroll` | `{ course_id }` (student joins a course; "my courses" = enrollments) |
+| PATCH | `/api/me` | body `{ full_name?, branch?, semester?, preferences? }` returns updated profile |
 
 ### Tutor chat
 | Method | Path | Body | Returns |

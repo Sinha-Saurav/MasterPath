@@ -1,18 +1,20 @@
--- MasterPath database schema (Supabase / Postgres)
+-- MasterPath database schema v2 (Supabase / Postgres)
 -- Run in: Supabase Dashboard -> SQL Editor -> New query -> paste -> Run
+-- Run it on a fresh project. Re-running needs the tables dropped first.
 
 create extension if not exists vector;
 
--- ---------------------------------------------------------------
--- Users
--- ---------------------------------------------------------------
+-- ===============================================================
+-- 1. USERS
+-- ===============================================================
 create table public.profiles (
-  id          uuid primary key references auth.users(id) on delete cascade,
-  full_name   text,
-  role        text not null default 'student' check (role in ('student', 'admin')),
-  branch      text,
-  semester    smallint,
-  created_at  timestamptz not null default now()
+  id           uuid primary key references auth.users(id) on delete cascade,
+  full_name    text,
+  role         text not null default 'student' check (role in ('student', 'admin')),
+  branch       text,
+  semester     smallint,
+  preferences  jsonb not null default '{}'::jsonb,  -- e.g. {"explain_style":"simple","language":"en"}
+  created_at   timestamptz not null default now()
 );
 
 -- Auto-create a profile row when someone signs up
@@ -29,14 +31,21 @@ create trigger on_auth_user_created
   after insert on auth.users
   for each row execute function public.handle_new_user();
 
--- ---------------------------------------------------------------
--- Syllabus structure
--- ---------------------------------------------------------------
+-- ===============================================================
+-- 2. SYLLABUS STRUCTURE
+-- ===============================================================
 create table public.courses (
   id          serial primary key,
   code        text unique,
   name        text not null,
   created_at  timestamptz not null default now()
+);
+
+create table public.enrollments (
+  student_id  uuid not null references public.profiles(id) on delete cascade,
+  course_id   int  not null references public.courses(id) on delete cascade,
+  created_at  timestamptz not null default now(),
+  primary key (student_id, course_id)
 );
 
 create table public.topics (
@@ -49,9 +58,17 @@ create table public.topics (
 );
 create index topics_course_idx on public.topics(course_id);
 
--- ---------------------------------------------------------------
--- Study material + RAG chunks (RAG teammate fills chunks)
--- ---------------------------------------------------------------
+-- "Learn topic B before topic A". Used to order learning plans.
+create table public.topic_prerequisites (
+  topic_id         int not null references public.topics(id) on delete cascade,
+  prerequisite_id  int not null references public.topics(id) on delete cascade,
+  primary key (topic_id, prerequisite_id),
+  check (topic_id <> prerequisite_id)
+);
+
+-- ===============================================================
+-- 3. STUDY MATERIAL + RAG CHUNKS  (RAG teammate fills chunks)
+-- ===============================================================
 create table public.documents (
   id            uuid primary key default gen_random_uuid(),
   course_id     int not null references public.courses(id) on delete cascade,
@@ -80,32 +97,33 @@ create index chunks_topic_idx on public.chunks(topic_id);
 create index chunks_embedding_idx on public.chunks
   using hnsw (embedding vector_cosine_ops);
 
--- ---------------------------------------------------------------
--- Questions, quizzes, attempts
--- ---------------------------------------------------------------
+-- ===============================================================
+-- 4. QUESTIONS, QUIZZES, ATTEMPTS
+-- ===============================================================
 create table public.questions (
-  id              bigserial primary key,
-  topic_id        int not null references public.topics(id) on delete cascade,
-  type            text not null check (type in ('mcq', 'numerical', 'short', 'long')),
-  difficulty      smallint not null default 3 check (difficulty between 1 and 5),
-  prompt          text not null,
-  options         jsonb,            -- mcq: ["A text", "B text", ...]
-  correct_answer  text,             -- mcq: option index/text, numerical: value
-  rubric          text,             -- short/long: what a good answer contains
-  explanation     text,
-  source          text not null default 'generated' check (source in ('seed', 'generated')),
-  created_at      timestamptz not null default now()
+  id               bigserial primary key,
+  topic_id         int not null references public.topics(id) on delete cascade,
+  source_chunk_id  bigint references public.chunks(id) on delete set null, -- material it was generated from
+  type             text not null check (type in ('mcq', 'numerical', 'short', 'long')),
+  difficulty       smallint not null default 3 check (difficulty between 1 and 5),
+  prompt           text not null,
+  options          jsonb,            -- mcq: ["A text", "B text", ...]
+  correct_answer   text,             -- mcq: option index/text, numerical: value
+  rubric           text,             -- short/long: what a good answer contains
+  explanation      text,
+  source           text not null default 'generated' check (source in ('seed', 'generated')),
+  created_at       timestamptz not null default now()
 );
 create index questions_topic_diff_idx on public.questions(topic_id, difficulty);
 
 create table public.quizzes (
-  id          uuid primary key default gen_random_uuid(),
-  student_id  uuid not null references public.profiles(id) on delete cascade,
-  course_id   int not null references public.courses(id),
-  topic_id    int references public.topics(id),
-  status      text not null default 'in_progress' check (status in ('in_progress', 'finished')),
-  created_at  timestamptz not null default now(),
-  finished_at timestamptz
+  id           uuid primary key default gen_random_uuid(),
+  student_id   uuid not null references public.profiles(id) on delete cascade,
+  course_id    int not null references public.courses(id),
+  topic_id     int references public.topics(id),
+  status       text not null default 'in_progress' check (status in ('in_progress', 'finished')),
+  created_at   timestamptz not null default now(),
+  finished_at  timestamptz
 );
 
 create table public.quiz_questions (
@@ -121,6 +139,7 @@ create table public.attempts (
   student_id      uuid not null references public.profiles(id) on delete cascade,
   question_id     bigint not null references public.questions(id),
   quiz_id         uuid references public.quizzes(id) on delete set null,
+  mode            text not null default 'quiz' check (mode in ('quiz', 'practice')),
   topic_id        int not null references public.topics(id),   -- copied from question for fast queries
   difficulty      smallint not null,                           -- copied from question at attempt time
   answer          text,
@@ -129,27 +148,38 @@ create table public.attempts (
   time_taken_sec  int,
   hints_used      smallint not null default 0,
   feedback        text,
+  mastery_after   numeric(4,3),                                -- topic mastery right after this attempt (progress charts)
   created_at      timestamptz not null default now()
 );
 create index attempts_student_time_idx on public.attempts(student_id, created_at desc);
 create index attempts_student_topic_idx on public.attempts(student_id, topic_id);
+create index attempts_question_idx on public.attempts(question_id);
 
--- ---------------------------------------------------------------
--- Student knowledge profile
--- ---------------------------------------------------------------
+-- Real-world difficulty of each question, calibrated from student results.
+create view public.question_stats with (security_invoker = true) as
+select question_id,
+       count(*)                          as times_attempted,
+       avg(case when is_correct then 1.0 else 0.0 end) as pct_correct,
+       avg(time_taken_sec)               as avg_time_sec
+from public.attempts
+group by question_id;
+
+-- ===============================================================
+-- 5. STUDENT KNOWLEDGE PROFILE
+-- ===============================================================
 create table public.mastery (
-  student_id     uuid not null references public.profiles(id) on delete cascade,
-  topic_id       int not null references public.topics(id) on delete cascade,
-  score          numeric(4,3) not null default 0.5 check (score between 0 and 1),
-  attempts_count int not null default 0,
-  correct_count  int not null default 0,
-  updated_at     timestamptz not null default now(),
+  student_id      uuid not null references public.profiles(id) on delete cascade,
+  topic_id        int not null references public.topics(id) on delete cascade,
+  score           numeric(4,3) not null default 0.5 check (score between 0 and 1),
+  attempts_count  int not null default 0,
+  correct_count   int not null default 0,
+  updated_at      timestamptz not null default now(),
   primary key (student_id, topic_id)
 );
 
--- ---------------------------------------------------------------
--- Chat tutor
--- ---------------------------------------------------------------
+-- ===============================================================
+-- 6. CHAT TUTOR
+-- ===============================================================
 create table public.chat_sessions (
   id          uuid primary key default gen_random_uuid(),
   student_id  uuid not null references public.profiles(id) on delete cascade,
@@ -163,16 +193,18 @@ create table public.chat_messages (
   session_id  uuid not null references public.chat_sessions(id) on delete cascade,
   role        text not null check (role in ('user', 'assistant')),
   content     text not null,
+  input_type  text not null default 'text' check (input_type in ('text', 'image', 'voice')),
   image_url   text,
   sources     jsonb,            -- [{chunk_id, document_title, page}]
   topic_id    int references public.topics(id),
+  rating      smallint check (rating in (-1, 1)),   -- thumbs down / up on assistant replies
   created_at  timestamptz not null default now()
 );
 create index chat_messages_session_idx on public.chat_messages(session_id, created_at);
 
--- ---------------------------------------------------------------
--- Learning plans
--- ---------------------------------------------------------------
+-- ===============================================================
+-- 7. LEARNING PLANS
+-- ===============================================================
 create table public.learning_plans (
   id          uuid primary key default gen_random_uuid(),
   student_id  uuid not null references public.profiles(id) on delete cascade,
@@ -183,39 +215,60 @@ create table public.learning_plans (
 );
 
 create table public.plan_items (
-  id          bigserial primary key,
-  plan_id     uuid not null references public.learning_plans(id) on delete cascade,
-  topic_id    int references public.topics(id),
-  title       text not null,
-  action      text,             -- e.g. "Revise notes", "Practice 5 medium questions"
-  position    int not null,
-  status      text not null default 'todo' check (status in ('todo', 'done')),
-  due_date    date
+  id           bigserial primary key,
+  plan_id      uuid not null references public.learning_plans(id) on delete cascade,
+  topic_id     int references public.topics(id),
+  document_id  uuid references public.documents(id) on delete set null,  -- recommended study material
+  title        text not null,
+  action       text,             -- e.g. "Revise notes", "Practice 5 medium questions"
+  position     int not null,
+  status       text not null default 'todo' check (status in ('todo', 'done')),
+  due_date     date
 );
 
--- ---------------------------------------------------------------
--- Row Level Security
--- The Express backend uses the service-role key (bypasses RLS).
--- These policies protect data if the frontend ever queries Supabase directly.
--- ---------------------------------------------------------------
-alter table public.profiles       enable row level security;
-alter table public.attempts       enable row level security;
-alter table public.mastery        enable row level security;
-alter table public.quizzes        enable row level security;
-alter table public.chat_sessions  enable row level security;
-alter table public.chat_messages  enable row level security;
-alter table public.learning_plans enable row level security;
-alter table public.plan_items     enable row level security;
+-- ===============================================================
+-- 8. ROW LEVEL SECURITY
+-- Supabase exposes every table through a public API using the anon key.
+-- A table WITHOUT row level security is readable AND writable by anyone,
+-- so RLS is enabled on EVERY table. No policy = no direct access.
+-- The Express backend uses the service-role key, which bypasses RLS.
+-- ===============================================================
+alter table public.profiles            enable row level security;
+alter table public.courses             enable row level security;
+alter table public.enrollments         enable row level security;
+alter table public.topics              enable row level security;
+alter table public.topic_prerequisites enable row level security;
+alter table public.documents           enable row level security;
+alter table public.chunks              enable row level security;
+alter table public.questions           enable row level security;
+alter table public.quizzes             enable row level security;
+alter table public.quiz_questions      enable row level security;
+alter table public.attempts            enable row level security;
+alter table public.mastery             enable row level security;
+alter table public.chat_sessions       enable row level security;
+alter table public.chat_messages       enable row level security;
+alter table public.learning_plans      enable row level security;
+alter table public.plan_items          enable row level security;
 
-create policy "own profile"   on public.profiles       for select using (id = auth.uid());
-create policy "own attempts"  on public.attempts       for select using (student_id = auth.uid());
-create policy "own mastery"   on public.mastery        for select using (student_id = auth.uid());
-create policy "own quizzes"   on public.quizzes        for select using (student_id = auth.uid());
-create policy "own sessions"  on public.chat_sessions  for select using (student_id = auth.uid());
-create policy "own plans"     on public.learning_plans for select using (student_id = auth.uid());
-create policy "own messages"  on public.chat_messages  for select using (
+-- Syllabus is readable by any logged-in user
+create policy "read courses"  on public.courses             for select to authenticated using (true);
+create policy "read topics"   on public.topics              for select to authenticated using (true);
+create policy "read prereqs"  on public.topic_prerequisites for select to authenticated using (true);
+
+-- Students see only their own rows
+create policy "own profile"     on public.profiles       for select using (id = auth.uid());
+create policy "own enrollments" on public.enrollments    for select using (student_id = auth.uid());
+create policy "own attempts"    on public.attempts       for select using (student_id = auth.uid());
+create policy "own mastery"     on public.mastery        for select using (student_id = auth.uid());
+create policy "own quizzes"     on public.quizzes        for select using (student_id = auth.uid());
+create policy "own sessions"    on public.chat_sessions  for select using (student_id = auth.uid());
+create policy "own plans"       on public.learning_plans for select using (student_id = auth.uid());
+create policy "own messages"    on public.chat_messages  for select using (
   exists (select 1 from public.chat_sessions s where s.id = session_id and s.student_id = auth.uid())
 );
-create policy "own plan items" on public.plan_items    for select using (
+create policy "own plan items"  on public.plan_items     for select using (
   exists (select 1 from public.learning_plans p where p.id = plan_id and p.student_id = auth.uid())
 );
+
+-- Deliberately NO policies on: questions (contains correct answers),
+-- quiz_questions, chunks, documents. Only the backend may read them.
