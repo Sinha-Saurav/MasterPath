@@ -160,3 +160,68 @@ export async function getMyCourses(req, res, next) {
 }
 
 
+
+export async function unenrollFromCourse(req, res, next) {
+  try {
+    const courseId = Number(req.params.id);
+
+    // 1. Validate the course ID.
+    if (!Number.isSafeInteger(courseId) || courseId <= 0) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_COURSE_ID",
+          message: "Course ID must be a positive integer.",
+        },
+      });
+    }
+
+    // 2. Check that the course exists.
+    const { data: course, error: courseError } = await supabase
+      .from("courses")
+      .select("id")
+      .eq("id", courseId)
+      .maybeSingle();
+
+    if (courseError) {
+      return next(courseError);
+    }
+
+    if (!course) {
+      return res.status(404).json({
+        error: {
+          code: "COURSE_NOT_FOUND",
+          message: "The requested course was not found.",
+        },
+      });
+    }
+
+    // 3. Delete only this authenticated student's enrollment.
+    const { data, error } = await supabase
+      .from("enrollments")
+      .delete()
+      .eq("student_id", req.user.id)
+      .eq("course_id", courseId)
+      .select("course_id")
+      .maybeSingle();
+
+    if (error) {
+      return next(error);
+    }
+
+    // 4. Check whether an enrollment existed.
+    if (!data) {
+      return res.status(404).json({
+        error: {
+          code: "ENROLLMENT_NOT_FOUND",
+          message: "You are not enrolled in this course.",
+        },
+      });
+    }
+
+    return res.status(204).send();
+  } catch (error) {
+    return next(error);
+  }
+}
+
+

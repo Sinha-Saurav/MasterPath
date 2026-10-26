@@ -31,6 +31,20 @@ export async function getMe(req, res, next) {
 
 export async function updateMe(req, res, next) {
   try {
+    
+    if (
+      req.body === null ||
+      typeof req.body !== "object" ||
+      Array.isArray(req.body)
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_REQUEST_BODY",
+          message: "Request body must be a JSON object.",
+        },
+      });
+    }
+
     const allowedFields = ["full_name", "branch", "semester"];
     const updates = {...req.body};
 
