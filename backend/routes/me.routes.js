@@ -11,10 +11,12 @@ import { authenticate } from "../middleware/auth.middleware.js";
 
 const router = Router();
 
-router.get("/", authenticate, getMe);
-router.patch("/", authenticate, updateMe);
-router.get("/courses", authenticate, getMyCourses)
-router.get("/dashboard", authenticate, getDashboard);
-router.get("/courses/:courseId/mastery", authenticate, getCourseTopicMastery);
+router.use(authenticate);
+
+router.get("/", getMe);
+router.patch("/", updateMe);
+router.get("/courses", getMyCourses)
+router.get("/dashboard", getDashboard);
+router.get("/courses/:courseId/mastery", getCourseTopicMastery);
 
 export default router;
