@@ -8,6 +8,8 @@ import TopicWorkspace from "./pages/TopicWorkspace";
 import Quizzes from "./pages/Quizzes";
 import QuizAttempt from "./pages/QuizAttempt";
 import QuizResults from "./pages/QuizResults";
+import Progress from "./pages/Progress";
+import AITutor from "./pages/AITutor";
 
 function Login() {
   return (
@@ -68,11 +70,11 @@ export default function App() {
           path="/courses/:courseId/topics/:topicId/learn"
           element={<TopicWorkspace />}
         />
-        <Route path="/ai-tutor" element={<PlaceholderPage title="AI Tutor" />} />
+        <Route path="/ai-tutor" element={<AITutor/>} />
         <Route path="/quizzes" element={<Quizzes/>} />
         <Route path="/quizzes/:quizId/attempt" element={<QuizAttempt />} />
         <Route path="/quizzes/:quizId/results" element={<QuizResults />} />
-        <Route path="/progress" element={<PlaceholderPage title="My Progress" />} />
+        <Route path="/progress" element={<Progress />} />
         <Route path="/planner" element={<PlaceholderPage title="Study Planner" />} />
         <Route path="/profile" element={<PlaceholderPage title="My Profile" />} />
         <Route path="/settings" element={<PlaceholderPage title="Settings" />} />
