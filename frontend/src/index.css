@@ -45,6 +45,15 @@ html {
   scroll-behavior: smooth;
 }
 
+.sidebar-scroll {
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Internet Explorer / Edge legacy */
+}
+
+.sidebar-scroll::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Edge */
+}
+
 body {
   margin: 0;
   min-width: 320px;

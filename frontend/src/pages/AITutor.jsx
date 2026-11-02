@@ -246,6 +246,176 @@ function MessageContent({ message }) {
   );
 }
 
+
+const initialDocuments = [
+  {
+    id: 1,
+    name: "DBMS_Notes.pdf",
+    course: "Database Management Systems",
+    size: "2.4 MB",
+    uploadedAt: "Oct 25, 2026",
+  },
+  {
+    id: 2,
+    name: "Operating_Systems_Unit_1.pdf",
+    course: "Operating Systems",
+    size: "1.8 MB",
+    uploadedAt: "Oct 24, 2026",
+  },
+  {
+    id: 3,
+    name: "DSA_Revision.pdf",
+    course: "Data Structures & Algorithms",
+    size: "3.1 MB",
+    uploadedAt: "Oct 22, 2026",
+  },
+];
+
+function DocumentsSection() {
+  const [documents, setDocuments] = useState(initialDocuments);
+
+  function handleUpload(event) {
+    const files = Array.from(event.target.files || []);
+
+    const newDocuments = files
+      .filter((file) => file.type === "application/pdf")
+      .map((file) => ({
+        id: Date.now() + Math.random(),
+        name: file.name,
+        course: "General Study Material",
+        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
+        uploadedAt: new Date().toLocaleDateString("en-IN", {
+          day: "2-digit",
+          month: "short",
+          year: "numeric",
+        }),
+      }));
+
+    setDocuments((prev) => [...newDocuments, ...prev]);
+    event.target.value = "";
+  }
+
+  function handleDelete(id) {
+    setDocuments((prev) => prev.filter((doc) => doc.id !== id));
+  }
+
+  return (
+    <section className="mx-4 mb-5 rounded-2xl border border-border bg-surface p-4 sm:mx-5 sm:p-5">
+      {/* Header */}
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <div className="flex items-center gap-2">
+            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
+              <FiFileText size={18} />
+            </div>
+
+            <div>
+              <h2 className="text-sm font-bold text-foreground">
+                My Documents
+              </h2>
+              <p className="mt-0.5 text-[11px] text-muted">
+                Manage your study materials
+              </p>
+            </div>
+          </div>
+        </div>
+
+        <span className="rounded-full bg-brand-wash px-3 py-1.5 text-xs font-semibold text-brand-hover">
+          {documents.length} {documents.length === 1 ? "document" : "documents"}
+        </span>
+      </div>
+
+      {/* Upload area */}
+      <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-brand/40 bg-brand-wash/30 px-4 py-6 text-center transition hover:border-brand hover:bg-brand-wash/60">
+        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
+          <FiPlus size={20} />
+        </div>
+
+        <p className="mt-3 text-sm font-semibold text-foreground">
+          Upload study materials
+        </p>
+
+        <p className="mt-1 text-xs text-muted">
+          Select PDF files from your device
+        </p>
+
+        <span className="mt-3 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white">
+          Upload PDF
+        </span>
+
+        <input
+          type="file"
+          accept=".pdf,application/pdf"
+          multiple
+          onChange={handleUpload}
+          className="hidden"
+        />
+      </label>
+
+      {/* Document list */}
+      <div className="mt-5">
+        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
+          Uploaded files
+        </p>
+
+        {documents.length > 0 ? (
+          <div className="space-y-2">
+            {documents.map((document) => (
+              <div
+                key={document.id}
+                className="group flex items-center gap-3 rounded-xl border border-border bg-app p-3 transition hover:border-brand/40"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
+                  <FiFileText size={19} />
+                </div>
+
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-xs font-semibold text-foreground">
+                    {document.name}
+                  </p>
+
+                  <p className="mt-1 truncate text-[10px] text-muted">
+                    {document.course}
+                  </p>
+
+                  <p className="mt-1 text-[10px] text-muted">
+                    {document.size} · {document.uploadedAt}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleDelete(document.id)}
+                  title="Delete document"
+                  aria-label={`Delete ${document.name}`}
+                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-error/10 hover:text-error"
+                >
+                  <FiTrash2 size={15} />
+                </button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-xl bg-app px-4 py-8 text-center">
+            <FiFileText className="mx-auto text-muted" size={24} />
+            <p className="mt-2 text-sm font-semibold text-foreground">
+              No documents uploaded
+            </p>
+            <p className="mt-1 text-xs text-muted">
+              Upload your study materials to get started.
+            </p>
+          </div>
+        )}
+      </div>
+
+      <p className="mt-4 text-[10px] leading-5 text-muted">
+        Demo mode: files are not sent to the RAG service or permanently stored.
+      </p>
+    </section>
+  );
+}
+
+
 export default function AITutor() {
   const [conversations, setConversations] = useState(initialConversations);
   const [activeConversation, setActiveConversation] = useState(null);
@@ -597,6 +767,7 @@ export default function AITutor() {
         )}
 
         {/* Chat messages */}
+        {selectedMode === "documents" && <DocumentsSection />}
         <div className="min-h-0 flex-1 overflow-y-auto">
           {!hasMessages ? (
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-5 py-8 sm:px-8">

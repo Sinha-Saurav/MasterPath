@@ -22,7 +22,6 @@ const navigation = [
   { label: "AI Tutor", path: "/ai-tutor", icon: FiZap },
   { label: "Quizzes", path: "/quizzes", icon: FiCheckSquare },
   { label: "My Progress", path: "/progress", icon: FiActivity },
-  { label: "Study Planner", path: "/planner", icon: FiCalendar },
 ];
 
 const secondaryNavigation = [
@@ -100,7 +99,7 @@ export default function Sidebar({ mobileOpen, onClose }) {
         </div>
 
         {/* Primary navigation */}
-        <div className="flex-1 overflow-x-hidden overflow-y-auto px-2 py-5">
+        <div className="sidebar-scroll flex-1 overflow-x-hidden overflow-y-auto px-2 py-5">
           <p className="mb-3 whitespace-nowrap px-3 text-[10px] font-bold uppercase tracking-[0.16em] text-muted opacity-100 md:opacity-0 md:group-hover/sidebar:opacity-100">
             Learning
           </p>
