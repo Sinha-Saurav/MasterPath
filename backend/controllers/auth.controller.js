@@ -1,5 +1,44 @@
 
 import { supabaseAuth } from "../config/supabaseAuth.js";
+const isProduction = process.env.NODE_ENV === "production";
+
+const accessCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: "lax",
+  path: "/",
+};
+
+const refreshCookieOptions = {
+  httpOnly: true,
+  secure: isProduction,
+  sameSite: "lax",
+  path: "/api/auth/refresh",
+};
+
+function setAuthCookies(res, session) {
+  const accessMaxAge = Math.max(
+    0,
+    session.expires_at * 1000 - Date.now()
+  );
+
+  res.cookie("access_token", session.access_token, {
+    ...accessCookieOptions,
+    maxAge: accessMaxAge,
+  });
+
+  res.cookie("refresh_token", session.refresh_token, {
+    ...refreshCookieOptions,
+    // Cookie expiry is a client-side bound; Supabase
+    // remains authoritative for refresh-token validity.
+    maxAge: 30 * 24 * 60 * 60 * 1000,
+  });
+}
+
+function clearAuthCookies(res) {
+  res.clearCookie("access_token", accessCookieOptions);
+  res.clearCookie("refresh_token", refreshCookieOptions);
+}
 
 export async function register(req, res, next) {
   try {
@@ -154,6 +193,7 @@ export async function login(req, res, next) {
       return next(error);
     }
 
+
     const { user, session } = data;
 
     if (!user || !session) {
@@ -165,19 +205,16 @@ export async function login(req, res, next) {
       });
     }
 
-    // 4. Return only the fields the client needs.
+    setAuthCookies(res, session);
+
     return res.status(200).json({
       message: "Login successful.",
       user: {
         id: user.id,
         email: user.email,
       },
-      session: {
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_at: session.expires_at,
-      },
     });
+
   } catch (error) {
     return next(error);
   }
@@ -185,51 +222,47 @@ export async function login(req, res, next) {
 
 
 
+
 export async function refreshSession(req, res, next) {
   try {
-    const { refresh_token } = req.body ?? {};
+    const refresh_token = req.cookies?.refresh_token;
 
-    // 1. Validate the refresh token.
-    if (
-      typeof refresh_token !== "string" ||
-      refresh_token.trim().length === 0
-    ) {
-      return res.status(400).json({
+    if (!refresh_token) {
+      return res.status(401).json({
         error: {
-          code: "INVALID_REQUEST",
-          message: "Refresh token is required.",
+          code: "INVALID_REFRESH_TOKEN",
+          message: "Refresh token is missing. Please log in again.",
         },
       });
     }
 
-    // 2. Ask Supabase to refresh the session.
     const { data, error } =
       await supabaseAuth.auth.refreshSession({
-        refresh_token: refresh_token.trim(),
+        refresh_token,
       });
 
     if (error || !data.session || !data.user) {
+      clearAuthCookies(res);
+
       return res.status(401).json({
         error: {
           code: "INVALID_REFRESH_TOKEN",
-          message: "Refresh token is invalid, expired, or no longer usable. Please log in again.",
+          message:
+            "Refresh token is invalid or expired. Please log in again.",
         },
       });
     }
 
     const { session, user } = data;
 
-    // 3. Return the new session tokens.
+    // Rotate both cookies with the new Supabase session.
+    setAuthCookies(res, session);
+
     return res.status(200).json({
       message: "Session refreshed successfully.",
       user: {
         id: user.id,
         email: user.email,
-      },
-      session: {
-        access_token: session.access_token,
-        refresh_token: session.refresh_token,
-        expires_at: session.expires_at,
       },
     });
   } catch (error) {
@@ -237,3 +270,178 @@ export async function refreshSession(req, res, next) {
   }
 }
 
+
+
+export async function logout(req, res, next) {
+  try {
+    clearAuthCookies(res);
+
+    return res.status(200).json({
+      message: "Logout successful.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+
+
+export async function forgotPassword(req, res, next) {
+  try {
+    const { email } = req.body ?? {};
+
+    if (typeof email !== "string" || !email.trim()) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_REQUEST",
+          message: "Email address is required.",
+        },
+      });
+    }
+
+    const normalizedEmail = email.trim().toLowerCase();
+
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (
+      normalizedEmail.length > 254 ||
+      !emailPattern.test(normalizedEmail)
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_EMAIL",
+          message: "Provide a valid email address.",
+        },
+      });
+    }
+
+    const { error } =
+      await supabaseAuth.auth.resetPasswordForEmail(
+        normalizedEmail,
+        {
+          redirectTo: `${process.env.FRONTEND_URL}/reset-password`,
+        }
+      );
+
+    if (error) {
+      return next(error);
+    }
+
+    // Generic response to avoid revealing whether an account exists.
+    return res.status(200).json({
+      message:
+        "If an account exists for this email, reset instructions will be sent.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+
+
+export async function recoverySession(req, res, next) {
+  try {
+    const { token_hash, type } = req.body ?? {};
+
+    if (
+      typeof token_hash !== "string" ||
+      !token_hash.trim() ||
+      type !== "recovery"
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_RECOVERY_TOKEN",
+          message: "A valid recovery token is required.",
+        },
+      });
+    }
+
+    const { data, error } = await supabaseAuth.auth.verifyOtp({
+      token_hash: token_hash.trim(),
+      type: "recovery",
+    });
+
+    if (error || !data.session || !data.user) {
+      clearAuthCookies(res);
+
+      return res.status(401).json({
+        error: {
+          code: "INVALID_RECOVERY_TOKEN",
+          message: "Recovery link is invalid or expired.",
+        },
+      });
+    }
+
+    setAuthCookies(res, data.session);
+
+    return res.status(200).json({
+      message: "Recovery session established.",
+      user: {
+        id: data.user.id,
+        email: data.user.email,
+      },
+    });
+  } catch (error) {
+    return next(error);
+  }
+}
+
+
+export async function updatePassword(req, res, next) {
+  try {
+    const { password } = req.body ?? {};
+
+    if (
+      typeof password !== "string" ||
+      password.length < 8 ||
+      password.length > 128
+    ) {
+      return res.status(400).json({
+        error: {
+          code: "INVALID_PASSWORD",
+          message: "Password must contain 8–128 characters.",
+        },
+      });
+    }
+
+    const accessToken = req.cookies?.access_token;
+
+    if (!accessToken) {
+      return res.status(401).json({
+        error: {
+          code: "UNAUTHORIZED",
+          message: "Recovery session is required.",
+        },
+      });
+    }
+
+    const { data: userData, error: userError } =
+      await supabaseAuth.auth.getUser(accessToken);
+
+    if (userError || !userData.user) {
+      return res.status(401).json({
+        error: {
+          code: "INVALID_SESSION",
+          message: "Recovery session is invalid or expired.",
+        },
+      });
+    }
+
+    const { data, error } =
+      await supabaseAuth.auth.updateUser({
+        password,
+      });
+
+    if (error) {
+      return next(error);
+    }
+
+    clearAuthCookies(res);
+
+    return res.status(200).json({
+      message: "Password updated successfully. Please log in again.",
+    });
+  } catch (error) {
+    return next(error);
+  }
+}

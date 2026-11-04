@@ -13,32 +13,14 @@ import AITutor from "./pages/AITutor";
 import Profile from "./pages/Profile";
 import Settings from "./pages/Settings";
 import ExploreCourses from "./pages/ExploreCourses";
-import {
-  Login,
-  Signup,
-  VerifyEmail,
-  ForgotPassword,
-  ResetPasswordConfirm,
-} from "./pages/MasterPathAuthPages";
+
+import { Login } from "./pages/AuthPages/Login";
+import { Signup } from "./pages/AuthPages/Signup";
+import { VerifyEmail } from "./pages/AuthPages/VerifyEmail";
+import { ForgotPassword } from "./pages/AuthPages/ForgotPassword";
+import { ResetPasswordConfirm } from "./pages/AuthPages/ResetPasswordConfirm";
 
 
-function PlaceholderPage({ title }) {
-  return (
-    <section className="rounded-panel border border-border bg-surface p-6 sm:p-8">
-      <p className="text-xs font-semibold uppercase tracking-widest text-brand">
-        MasterPath
-      </p>
-
-      <h1 className="mt-3 font-heading text-2xl font-bold text-foreground">
-        {title}
-      </h1>
-
-      <p className="mt-2 text-sm text-muted">
-        This page is ready for implementation. We'll build it next.
-      </p>
-    </section>
-  );
-}
 
 export default function App() {
   return (

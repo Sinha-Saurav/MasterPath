@@ -1,11 +1,11 @@
+
 import { supabase } from "../config/supabase.js";
 
 export async function authenticate(req, res, next) {
   try {
-    const authHeader = req.headers.authorization;
+    const token = req.cookies?.access_token;
 
-    // 1. Check whether the Authorization header exists
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!token) {
       return res.status(401).json({
         error: {
           code: "UNAUTHORIZED",
@@ -14,19 +14,6 @@ export async function authenticate(req, res, next) {
       });
     }
 
-    // 2. Extract the access token
-    const token = authHeader.split(" ")[1];
-
-    if (!token) {
-      return res.status(401).json({
-        error: {
-          code: "UNAUTHORIZED",
-          message: "Access token is missing",
-        },
-      });
-    }
-
-    // 3. Verify the token with Supabase Auth
     const {
       data: { user },
       error,
@@ -41,10 +28,7 @@ export async function authenticate(req, res, next) {
       });
     }
 
-    // 4. Attach the verified user to the request
     req.user = user;
-
-    // 5. Continue to the next middleware/controller
     return next();
   } catch (error) {
     console.error("Authentication middleware error:", error);

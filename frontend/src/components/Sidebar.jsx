@@ -1,5 +1,6 @@
-
-import { NavLink } from "react-router-dom";
+import { useState } from "react";
+import { NavLink, useNavigate } from "react-router-dom";
+import api from "../services/api";
 import {
   FiActivity,
   FiBookOpen,
@@ -39,10 +40,9 @@ function NavigationLink({ item, onClose }) {
       onClick={onClose}
       title={item.label}
       className={({ isActive }) =>
-        `flex h-11 items-center gap-3 overflow-hidden rounded-xl px-3 transition-colors ${
-          isActive
-            ? "bg-brand-soft font-semibold text-brand-hover"
-            : "text-muted hover:bg-brand-wash hover:text-brand-hover"
+        `flex h-11 items-center gap-3 overflow-hidden rounded-xl px-3 transition-colors ${isActive
+          ? "bg-brand-soft font-semibold text-brand-hover"
+          : "text-muted hover:bg-brand-wash hover:text-brand-hover"
         }`
       }
     >
@@ -55,6 +55,37 @@ function NavigationLink({ item, onClose }) {
 }
 
 export default function Sidebar({ mobileOpen, onClose }) {
+
+  const navigate = useNavigate();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState("");
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+
+    setLoggingOut(true);
+    setLogoutError("");
+
+    try {
+      await api.post("/auth/logout");
+
+        setShowLogoutConfirm(false);
+      onClose?.();
+
+      navigate("/login", {
+        replace: true,
+      });
+    } catch (err) {
+      setLogoutError(
+        err.response?.data?.error?.message ||
+        "Unable to log out. Please try again."
+      );
+    } finally {
+      setLoggingOut(false);
+    }
+  };
+
   return (
     <>
       {mobileOpen && (
@@ -67,11 +98,10 @@ export default function Sidebar({ mobileOpen, onClose }) {
       )}
 
       <aside
-        className={`group/sidebar fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-border bg-surface transition-[width,transform] duration-200 ease-out md:w-16 md:hover:w-[248px] ${
-          mobileOpen
-            ? "translate-x-0"
-            : "-translate-x-full md:translate-x-0"
-        }`}
+        className={`group/sidebar fixed inset-y-0 left-0 z-50 flex w-[248px] flex-col border-r border-border bg-surface transition-[width,transform] duration-200 ease-out md:w-16 md:hover:w-[248px] ${mobileOpen
+          ? "translate-x-0"
+          : "-translate-x-full md:translate-x-0"
+          }`}
       >
         {/* Brand */}
         <div className="flex h-[76px] shrink-0 items-center gap-3 overflow-hidden border-b border-border px-4">
@@ -151,21 +181,83 @@ export default function Sidebar({ mobileOpen, onClose }) {
             />
           </div>
 
+          {logoutError && (
+            <p className="px-3 py-2 text-xs text-error">
+              {logoutError}
+            </p>
+          )}
+
           <button
             type="button"
             title="Log out"
-            onClick={() => {
-              // Connect to the actual authentication logout flow later.
-            }}
-            className="mt-2 flex h-10 w-full items-center gap-3 overflow-hidden rounded-xl px-3 text-muted transition-colors hover:bg-error/10 hover:text-error"
+            onClick={() => setShowLogoutConfirm(true)}
+            disabled={loggingOut}
+            className="mt-2 flex h-10 w-full items-center gap-3 overflow-hidden rounded-xl px-3 text-muted transition-colors hover:bg-error/10 hover:text-error disabled:cursor-not-allowed disabled:opacity-60"
           >
             <FiLogOut size={19} className="shrink-0" />
+
             <span className="whitespace-nowrap text-[13px] opacity-100 md:opacity-0 md:group-hover/sidebar:opacity-100">
               Log out
             </span>
           </button>
         </div>
       </aside>
+
+      {showLogoutConfirm && (
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 px-4 backdrop-blur-sm">
+          <div
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="logout-title"
+            className="w-full max-w-sm rounded-2xl border border-border bg-surface p-6 shadow-xl"
+          >
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl bg-error/10 text-error">
+              <FiLogOut size={22} />
+            </div>
+
+            <h2
+              id="logout-title"
+              className="mt-4 text-center text-lg font-bold text-foreground"
+            >
+              Log out of MasterPath?
+            </h2>
+
+            <p className="mt-2 text-center text-sm leading-6 text-secondary">
+              Are you sure you want to log out of your account?
+            </p>
+
+            {logoutError && (
+              <p className="mt-3 text-center text-sm text-error">
+                {logoutError}
+              </p>
+            )}
+
+            <div className="mt-6 flex gap-3">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowLogoutConfirm(false);
+                  setLogoutError("");
+                }}
+                disabled={loggingOut}
+                className="flex-1 rounded-xl border border-border px-4 py-2.5 text-sm font-semibold text-foreground transition-colors hover:bg-brand-wash disabled:opacity-60"
+              >
+                Cancel
+              </button>
+
+              <button
+                type="button"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                className="flex-1 rounded-xl bg-error px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {loggingOut ? "Logging out..." : "Confirm logout"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </>
   );
 }
