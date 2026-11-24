@@ -13,6 +13,8 @@ import {
   FiZap,
 } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+import api from "../services/api";
 
 const courses = [
   {
@@ -104,6 +106,30 @@ function StatCard({ icon: Icon, label, value, detail, tint, iconColor }) {
 export default function Dashboard() {
   const navigate = useNavigate();
 
+  const {
+    data: courses = [],
+    isLoading: coursesLoading,
+    isError: coursesError,
+  } = useQuery({
+    queryKey: ["myCourses"],
+    queryFn: async () => {
+      const response = await api.get("/me/courses");
+      return response.data;
+    },
+  });
+
+  const {
+    data: dashboardData,
+    isLoading: dashboardLoading,
+    isError: dashboardError,
+  } = useQuery({
+    queryKey: ["myDashboard"],
+    queryFn: async () => {
+      const response = await api.get("/me/dashboard");
+      return response.data;
+    },
+  });
+
   return (
     <div className="mx-auto max-w-[1440px] space-y-7">
       {/* Welcome banner */}
@@ -166,32 +192,47 @@ export default function Dashboard() {
         <StatCard
           icon={FiBookOpen}
           label="Enrolled courses"
-          value="5"
+          value={coursesLoading ? "..." : courses.length}
           detail="Keep building your knowledge"
           tint="bg-brand-soft"
           iconColor="text-brand-hover"
         />
+
         <StatCard
           icon={FiTarget}
-          label="Overall progress"
-          value="72%"
+          label="Overall accuracy"
+          value={
+            dashboardLoading
+              ? "..."
+              : `${dashboardData?.summary?.overall_accuracy ?? 0}%`
+          }
           detail="Across your learning journey"
           tint="bg-info/10"
           iconColor="text-info"
         />
+
         <StatCard
           icon={FiCheckCircle}
           label="Quizzes completed"
-          value="18"
+          value={
+            dashboardLoading
+              ? "..."
+              : dashboardData?.summary?.quizzes_completed ?? 0
+          }
           detail="Practice makes progress"
           tint="bg-success/10"
           iconColor="text-success"
         />
+
         <StatCard
           icon={FiTrendingUp}
-          label="Study streak"
-          value="7 days"
-          detail="Consistency is your superpower"
+          label="Questions answered"
+          value={
+            dashboardLoading
+              ? "..."
+              : dashboardData?.summary?.questions_answered ?? 0
+          }
+          detail="Every question is a step forward"
           tint="bg-warning/10"
           iconColor="text-warning"
         />
@@ -209,91 +250,167 @@ export default function Dashboard() {
             />
 
             <div className="space-y-3">
-              {courses.map((course) => (
-                <button
-                  type="button"
-                  key={course.name}
-                  onClick={() => navigate("/courses")}
-                  className="group flex w-full items-center gap-4 rounded-card border border-border bg-surface p-4 text-left transition hover:border-brand/50 hover:shadow-sm sm:p-5"
-                >
-                  <div className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${course.background} ${course.color}`}>
-                    {course.initials}
-                  </div>
+              {coursesLoading ? (
+                <p className="rounded-card border border-border bg-surface p-5 text-sm text-muted">
+                  Loading your courses...
+                </p>
+              ) : coursesError ? (
+                <p className="rounded-card border border-border bg-surface p-5 text-sm text-error">
+                  Failed to load your courses. Please try again.
+                </p>
+              ) : courses.length === 0 ? (
+                <p className="rounded-card border border-border bg-surface p-5 text-sm text-muted">
+                  You haven't enrolled in any courses yet.
+                </p>
+              ) : (
+                  courses.map((course) => {
+                    const mastery = dashboardData?.course_mastery?.find(
+                      (item) => item.course_id === course.id
+                    );
 
-                  <div className="min-w-0 flex-1">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-foreground">
-                          {course.name}
-                        </h3>
-                        <p className="mt-1 text-xs text-muted">
-                          {course.topics}
-                        </p>
-                      </div>
+                    const progress = mastery?.mastery_score != null
+                      ? Math.round(mastery.mastery_score * 100)
+                      : 0;
 
-                      <span className={`text-sm font-bold ${course.color}`}>
-                        {course.progress}%
-                      </span>
-                    </div>
+                    const initials = course.code?.split("-")[0] ?? course.name.slice(0, 2);
 
-                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-wash">
-                      <div
-                        className={`h-full rounded-full ${
-                          course.initials === "DS"
-                            ? "bg-brand"
-                            : course.initials === "DB"
-                              ? "bg-info"
-                              : "bg-success"
-                        }`}
-                        style={{ width: `${course.progress}%` }}
-                      />
-                    </div>
-                  </div>
+                    const colors = [
+                      {
+                        background: "bg-brand-soft",
+                        color: "text-brand-hover",
+                        bar: "bg-brand",
+                      },
+                      {
+                        background: "bg-info/10",
+                        color: "text-info",
+                        bar: "bg-info",
+                      },
+                      {
+                        background: "bg-success/10",
+                        color: "text-success",
+                        bar: "bg-success",
+                      },
+                    ];
 
-                  <FiChevronRight
-                    size={19}
-                    className="shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-hover"
-                  />
-                </button>
-              ))}
+                    const style = colors[courses.indexOf(course) % colors.length];
+
+                    const topicsText = mastery?.total_topics > 0
+                      ? `${mastery.topics_assessed} of ${mastery.total_topics} topics assessed`
+                      : "Start learning this course";
+
+                    return (
+                      <button
+                        type="button"
+                        key={course.id}
+                        onClick={() => navigate("/courses")}
+                        className="group flex w-full items-center gap-4 rounded-card border border-border bg-surface p-4 text-left transition hover:border-brand/50 hover:shadow-sm sm:p-5"
+                      >
+                        <div
+                          className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${style.background} ${style.color}`}
+                        >
+                          {initials}
+                        </div>
+
+                        <div className="min-w-0 flex-1">
+                          <div className="flex flex-wrap items-center justify-between gap-2">
+                            <div className="min-w-0">
+                              <h3 className="truncate text-sm font-bold text-foreground">
+                                {course.name}
+                              </h3>
+
+                              <p className="mt-1 text-xs text-muted">
+                                {topicsText}
+                              </p>
+                            </div>
+
+                            <span className={`text-sm font-bold ${style.color}`}>
+                              {progress}%
+                            </span>
+                          </div>
+
+                          <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-wash">
+                            <div
+                              className={`h-full rounded-full ${style.bar}`}
+                              style={{ width: `${progress}%` }}
+                            />
+                          </div>
+                        </div>
+
+                        <FiChevronRight
+                          size={19}
+                          className="shrink-0 text-muted transition group-hover:translate-x-0.5 group-hover:text-brand-hover"
+                        />
+                      </button>
+                    );
+                  })
+                )}
             </div>
           </section>
 
-          {/* Tasks */}
+
+          {/* Recent Quizzes */}
           <section>
             <SectionHeading
-              title="Your next steps"
-              action="View planner"
-              onAction={() => navigate("/planner")}
+              title="Recent quizzes"
+              action="View all"
+              onAction={() => navigate("/quizzes")}
             />
 
             <div className="overflow-hidden rounded-card border border-border bg-surface">
-              {tasks.map((task, index) => (
-                <div
-                  key={task.title}
-                  className={`flex items-center gap-3 p-4 sm:px-5 ${
-                    index !== tasks.length - 1 ? "border-b border-border" : ""
-                  }`}
-                >
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
-                    <FiCheckCircle size={18} />
-                  </div>
+              {dashboardLoading ? (
+                <p className="p-5 text-sm text-muted">Loading recent quizzes...</p>
+              ) : dashboardError ? (
+                <p className="p-5 text-sm text-error">
+                  Failed to load recent quizzes.
+                </p>
+              ) : dashboardData?.recent_quizzes?.length ? (
+                dashboardData.recent_quizzes.map((quiz, index) => (
+                  <div
+                    key={quiz.quiz_id}
+                    className={`flex items-center gap-3 p-4 sm:px-5 ${index !== dashboardData.recent_quizzes.length - 1
+                      ? "border-b border-border"
+                      : ""
+                      }`}
+                  >
+                    <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
+                      <FiCheckCircle size={18} />
+                    </div>
 
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-semibold text-foreground">
-                      {task.title}
-                    </p>
-                    <p className="mt-1 text-xs text-muted">{task.detail}</p>
-                  </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate text-sm font-semibold text-foreground">
+                        Quiz • Topic {quiz.topic_id}
+                      </p>
 
-                  <span className="flex shrink-0 items-center gap-1 text-xs text-muted">
-                    <FiClock size={13} />
-                    {task.time}
-                  </span>
-                </div>
-              ))}
+                      <p className="mt-1 text-xs text-muted">
+                        Course #{quiz.course_id} · {quiz.correct_answers}/
+                        {quiz.total_questions} correct
+                      </p>
+
+                      <p className="mt-1 text-xs text-muted">
+                        {quiz.finished_at
+                          ? new Date(quiz.finished_at).toLocaleDateString()
+                          : "Completion date unavailable"}
+                      </p>
+                    </div>
+
+                    <span
+                      className={`shrink-0 text-sm font-bold ${quiz.percentage >= 70
+                        ? "text-success"
+                        : "text-warning"
+                        }`}
+                    >
+                      {quiz.percentage}%
+                    </span>
+                  </div>
+                ))
+              ) : (
+                <p className="p-5 text-sm text-muted">
+                  No completed quizzes yet. Take a quiz to see your activity here!
+                </p>
+              )}
             </div>
           </section>
+
         </div>
 
         {/* Right column */}
@@ -392,11 +509,10 @@ export default function Dashboard() {
                   className="flex flex-col items-center gap-2"
                 >
                   <span
-                    className={`flex h-7 w-7 items-center justify-center rounded-lg ${
-                      index < 4
-                        ? "bg-brand-soft text-brand-hover"
-                        : "bg-brand-wash text-muted"
-                    }`}
+                    className={`flex h-7 w-7 items-center justify-center rounded-lg ${index < 4
+                      ? "bg-brand-soft text-brand-hover"
+                      : "bg-brand-wash text-muted"
+                      }`}
                   >
                     {day}
                   </span>

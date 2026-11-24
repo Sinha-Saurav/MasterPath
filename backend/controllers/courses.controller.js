@@ -1,22 +1,36 @@
 
 import { supabase } from "../config/supabase.js";
 
+
 export async function getCourses(req, res, next) {
   try {
     const { data, error } = await supabase
       .from("courses")
-      .select("id, code, name")
+      .select(`
+        id,
+        code,
+        name,
+        topics(count)
+      `)
       .order("name", { ascending: true });
 
     if (error) {
       return next(error);
     }
 
-    return res.status(200).json(data);
+    const courses = data.map((course) => ({
+      id: course.id,
+      code: course.code,
+      name: course.name,
+      topic_count: course.topics?.[0]?.count ?? 0,
+    }));
+
+    return res.status(200).json(courses);
   } catch (error) {
     return next(error);
   }
 }
+
 
 
 
@@ -134,6 +148,7 @@ export async function enrollInCourse(req, res, next) {
 }
 
 
+
 export async function getMyCourses(req, res, next) {
   try {
     const { data, error } = await supabase
@@ -142,16 +157,23 @@ export async function getMyCourses(req, res, next) {
         courses (
           id,
           code,
-          name
+          name,
+          topics(count)
         )
       `)
       .eq("student_id", req.user.id);
 
-    if (error) {
-      return next(error);
-    }
+    if (error) return next(error);
 
-    const courses = data.map((enrollment) => enrollment.courses);
+    const courses = data
+      .map((enrollment) => enrollment.courses)
+      .filter(Boolean)
+      .map((course) => ({
+        id: course.id,
+        code: course.code,
+        name: course.name,
+        topic_count: course.topics?.[0]?.count ?? 0,
+      }));
 
     return res.status(200).json(courses);
   } catch (error) {

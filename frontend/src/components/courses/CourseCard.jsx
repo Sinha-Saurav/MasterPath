@@ -26,51 +26,42 @@ export default function CourseCard({ course, onContinue, onMenu }) {
     <article className="group min-w-0 rounded-card border border-border bg-surface p-4 transition duration-200 hover:-translate-y-0.5 hover:border-brand/40 hover:shadow-md">
       <div className="flex items-start gap-3">
         <div
-          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${course.iconBg} ${course.iconColor}`}
+          className={`flex h-16 w-16 shrink-0 items-center justify-center rounded-2xl ${
+            course.iconBg || "bg-brand-soft"
+          } ${course.iconColor || "text-brand-hover"}`}
         >
           <Icon size={32} strokeWidth={1.8} />
         </div>
 
         <div className="min-w-0 flex-1 pt-1">
           <p className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-muted">
-            {course.category}
+            {course.code}
           </p>
+
           <h3 className="font-heading text-sm font-bold leading-5 text-foreground">
             {course.name}
           </h3>
         </div>
 
-        <button
-          type="button"
-          aria-label={`More options for ${course.name}`}
-          onClick={() => onMenu?.(course)}
-          className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-brand-wash hover:text-brand-hover"
-        >
-          <FiMoreHorizontal size={19} />
-        </button>
+        {onMenu && (
+          <button
+            type="button"
+            aria-label={`More options for ${course.name}`}
+            onClick={() => onMenu(course)}
+            className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-brand-wash hover:text-brand-hover"
+          >
+            <FiMoreHorizontal size={19} />
+          </button>
+        )}
       </div>
 
-      <div className="mt-4 flex items-center justify-between gap-2">
+      <div className="mt-5 flex items-center justify-between gap-2">
         <span className="text-xs text-muted">
-          {course.completedTopics}/{course.totalTopics} topics
+          {course.topic_count ?? 0} Topics
         </span>
-        <span className="text-xs font-bold text-foreground">
-          {course.progress}%
+        <span className="text-xs font-semibold text-brand-hover">
+          Enrolled
         </span>
-      </div>
-
-      <div
-        className="mt-2 h-2.5 overflow-hidden rounded-full bg-border/70"
-        role="progressbar"
-        aria-label={`${course.name} progress`}
-        aria-valuenow={course.progress}
-        aria-valuemin={0}
-        aria-valuemax={100}
-      >
-        <div
-          className={`h-full rounded-full transition-[width] duration-500 ${course.progressColor}`}
-          style={{ width: `${course.progress}%` }}
-        />
       </div>
 
       <button

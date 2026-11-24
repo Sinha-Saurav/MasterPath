@@ -30,7 +30,7 @@ export default function App() {
       <Route path="/verify-email" element={<VerifyEmail />} />
       <Route path="/forgot-password" element={<ForgotPassword />} />
       <Route
-        path="/reset-password/confirm"
+        path="/reset-password"
         element={<ResetPasswordConfirm />}
       />
 
@@ -53,7 +53,6 @@ export default function App() {
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
-      <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   );
 }

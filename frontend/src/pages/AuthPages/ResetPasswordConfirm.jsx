@@ -24,11 +24,13 @@ export function ResetPasswordConfirm() {
     let cancelled = false;
 
     const establishRecoverySession = async () => {
-      const params = new URLSearchParams(location.search);
-      const tokenHash = params.get("token_hash");
+      const params = new URLSearchParams(location.hash.slice(1));
+
+      const accessToken = params.get("access_token");
+      const refreshToken = params.get("refresh_token");
       const type = params.get("type");
 
-      if (!tokenHash || type !== "recovery") {
+      if (!accessToken || !refreshToken || type !== "recovery") {
         if (!cancelled) {
           setError(
             "Invalid or expired password reset link. Please request a new one."
@@ -40,9 +42,9 @@ export function ResetPasswordConfirm() {
 
       try {
         await api.post("/auth/recovery-session", {
-          token_hash: tokenHash,
-          type,
-        });
+  access_token: accessToken,
+  refresh_token: refreshToken,
+});
 
         if (!cancelled) {
           setRecoveryReady(true);
@@ -51,7 +53,7 @@ export function ResetPasswordConfirm() {
         if (!cancelled) {
           setError(
             err.response?.data?.error?.message ||
-              "Unable to validate the reset link. Please request a new one."
+            "Unable to validate the reset link. Please request a new one."
           );
         }
       } finally {
@@ -66,7 +68,7 @@ export function ResetPasswordConfirm() {
     return () => {
       cancelled = true;
     };
-  }, [location.search]);
+  }, [location.hash]);
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -100,8 +102,8 @@ export function ResetPasswordConfirm() {
     } catch (err) {
       setError(
         err.response?.data?.error?.message ||
-          err.response?.data?.message ||
-          "Unable to update password. Please try again."
+        err.response?.data?.message ||
+        "Unable to update password. Please try again."
       );
     } finally {
       setLoading(false);

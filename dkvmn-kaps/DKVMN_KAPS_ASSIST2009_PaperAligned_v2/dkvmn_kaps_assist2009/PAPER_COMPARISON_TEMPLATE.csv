@@ -1,0 +1,3 @@
+dataset,model,auc,accuracy,precision,recall,f1,log_loss,brier,source_or_run
+ASSIST2009,Original DKVMN-KAPS paper,0.8751,,,,,,,IEEE Access 12 (2024), DOI:10.1109/ACCESS.2024.3388718
+ASSIST2009,Our DKVMN-KAPS full five-fold run,,,,,,,,NOT RUN IN THIS PACKAGE SNAPSHOT

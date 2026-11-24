@@ -1,5 +1,7 @@
 
 import { supabaseAuth } from "../config/supabaseAuth.js";
+import { createClient } from "@supabase/supabase-js";
+
 const isProduction = process.env.NODE_ENV === "production";
 
 const accessCookieOptions = {
@@ -341,24 +343,38 @@ export async function forgotPassword(req, res, next) {
 
 export async function recoverySession(req, res, next) {
   try {
-    const { token_hash, type } = req.body ?? {};
+    const { access_token, refresh_token } = req.body ?? {};
 
     if (
-      typeof token_hash !== "string" ||
-      !token_hash.trim() ||
-      type !== "recovery"
+      typeof access_token !== "string" ||
+      !access_token.trim() ||
+      typeof refresh_token !== "string" ||
+      !refresh_token.trim()
     ) {
       return res.status(400).json({
         error: {
           code: "INVALID_RECOVERY_TOKEN",
-          message: "A valid recovery token is required.",
+          message: "A valid recovery session is required.",
         },
       });
     }
 
-    const { data, error } = await supabaseAuth.auth.verifyOtp({
-      token_hash: token_hash.trim(),
-      type: "recovery",
+    // Use a request-scoped client to avoid sharing auth state.
+    const recoveryClient = createClient(
+      process.env.SUPABASE_URL,
+      process.env.SUPABASE_ANON_KEY,
+      {
+        auth: {
+          autoRefreshToken: false,
+          persistSession: false,
+          detectSessionInUrl: false,
+        },
+      }
+    );
+
+    const { data, error } = await recoveryClient.auth.setSession({
+      access_token: access_token.trim(),
+      refresh_token: refresh_token.trim(),
     });
 
     if (error || !data.session || !data.user) {
