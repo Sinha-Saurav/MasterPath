@@ -153,7 +153,7 @@ export async function updateMe(req, res, next) {
 }
 
 
-async function buildCourseMastery(studentId) {
+export async function buildCourseMastery(studentId) {
   // Get the courses this student is enrolled in.
   const { data: enrollments, error: enrollmentError } = await supabase
     .from("enrollments")

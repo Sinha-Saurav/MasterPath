@@ -2,110 +2,23 @@
 import { useEffect, useRef, useState } from "react";
 import {
   FiPlus,
-  FiMessageSquare,
-  FiSearch,
-  FiMoreHorizontal,
   FiBookOpen,
-  FiCode,
-  FiClipboard,
-  FiFileText,
   FiSend,
-  FiPaperclip,
   FiTarget,
   FiCopy,
   FiCheck,
   FiChevronDown,
-  FiTrash2,
   FiMenu,
   FiX,
-  FiArrowUpRight,
-  FiClock,
+  FiFileText,
 } from "react-icons/fi";
 
 import { HiMiniSparkles } from "react-icons/hi2";
+import api from "../services/api";
 
-const courses = [
-  {
-    id: "dsa",
-    name: "Data Structures & Algorithms",
-    topics: ["Arrays", "Binary Search", "Linked Lists", "Trees", "Graphs", "Dynamic Programming"],
-  },
-  {
-    id: "dbms",
-    name: "Database Management Systems",
-    topics: ["SQL", "Normalization", "Transactions", "Indexing", "Joins"],
-  },
-  {
-    id: "os",
-    name: "Operating Systems",
-    topics: ["Process Management", "CPU Scheduling", "Deadlocks", "Memory Management"],
-  },
-  {
-    id: "cn",
-    name: "Computer Networks",
-    topics: ["OSI Model", "TCP/IP", "Routing", "Transport Layer"],
-  },
-  {
-    id: "se",
-    name: "Software Engineering",
-    topics: ["SDLC", "Agile", "Design Patterns", "Testing"],
-  },
-];
-
-const modes = [
-  { id: "explain", label: "Explain", icon: FiBookOpen },
-  { id: "practice", label: "Practice", icon: FiClipboard },
-  { id: "code", label: "Code help", icon: FiCode },
-  { id: "documents", label: "My documents", icon: FiFileText },
-];
-
-const suggestions = [
-  {
-    title: "Explain a concept",
-    description: "Make difficult topics easier to understand.",
-    prompt: "Explain binary search with a simple example.",
-    icon: FiBookOpen,
-  },
-  {
-    title: "Practice questions",
-    description: "Test your understanding of a topic.",
-    prompt: "Give me 5 questions on operating system scheduling.",
-    icon: FiClipboard,
-  },
-  {
-    title: "Help with code",
-    description: "Understand logic and solve coding problems.",
-    prompt: "Explain the two-pointer technique with code.",
-    icon: FiCode,
-  },
-  {
-    title: "Study my materials",
-    description: "Ask questions from your uploaded documents.",
-    prompt: "Summarize the important concepts from my course materials.",
-    icon: FiFileText,
-  },
-];
-
-const initialConversations = [
-  {
-    id: 1,
-    title: "Understanding Binary Search",
-    preview: "Can you explain binary search?",
-    date: "Today",
-  },
-  {
-    id: 2,
-    title: "SQL Normalization",
-    preview: "What is 3NF?",
-    date: "Yesterday",
-  },
-  {
-    id: 3,
-    title: "CPU Scheduling",
-    preview: "Explain Round Robin scheduling.",
-    date: "Yesterday",
-  },
-];
+// --------------------------------------------------
+// Helpers
+// --------------------------------------------------
 
 function createMessage(role, content, extra = {}) {
   return {
@@ -116,35 +29,18 @@ function createMessage(role, content, extra = {}) {
   };
 }
 
-function getMockResponse(question, mode, course, topic) {
-  const context = topic || course || "your selected subject";
-
-  if (mode === "practice") {
-    return {
-      content: `Let's test your understanding of ${context}!\n\n**Question 1:** Which of the following statements best describes the concept?\n\nA. It is used only for storing data.\n\nB. It provides a systematic approach to solving a problem.\n\nC. It eliminates the need for algorithms.\n\nD. None of the above.\n\nTry answering first. I'll explain the answer after you respond.`,
-      sources: [],
-    };
-  }
-
-  if (mode === "code") {
-    return {
-      content: `Let's approach this step by step.\n\nFor your question about **${context}**, first identify the input, expected output, and the logic needed to solve the problem.\n\n\`\`\`javascript\nfunction solve(arr) {\n  // Start by understanding the input\n  // Then implement the required logic\n  return arr;\n}\n\`\`\`\n\nShare the exact problem statement or your code, and I can walk through the solution with you.`,
-      sources: [],
-    };
-  }
-
-  if (mode === "documents") {
-    return {
-      content: `This is a mock document-based response.\n\nOnce the RAG service is connected, I'll search your uploaded course materials for information related to:\n\n**${question}**\n\nI'll then generate an answer grounded in the retrieved document sections and provide page references.\n\nFor now, document retrieval is not connected.`,
-      sources: [],
-    };
-  }
-
-  return {
-    content: `Let's understand this step by step.\n\n**1. Start with the basic idea**\n\n${question}\n\nThe key is to understand the underlying concept before memorizing its definition.\n\n**2. Think about an example**\n\nImagine you're solving a problem related to ${context}. Break it into smaller steps and examine how each step contributes to the final result.\n\n**3. Remember**\n\nTry explaining the concept in your own words. If you can explain it simply, you've understood it well.\n\nWould you like me to give you a practical example or a few practice questions?`,
-    sources: [],
-  };
+function getErrorMessage(error, fallback) {
+  return (
+    error.response?.data?.error?.message ||
+    error.response?.data?.detail ||
+    error.response?.data?.message ||
+    fallback
+  );
 }
+
+// --------------------------------------------------
+// Tutor avatar
+// --------------------------------------------------
 
 function TutorAvatar({ small = false }) {
   return (
@@ -158,24 +54,9 @@ function TutorAvatar({ small = false }) {
   );
 }
 
-function ModeButton({ mode, active, onClick }) {
-  const Icon = mode.icon;
-
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={`flex shrink-0 items-center gap-2 rounded-xl px-3 py-2 text-xs font-semibold transition ${
-        active
-          ? "bg-brand text-white"
-          : "border border-border bg-surface text-muted hover:border-brand hover:text-brand-hover"
-      }`}
-    >
-      <Icon size={15} />
-      {mode.label}
-    </button>
-  );
-}
+// --------------------------------------------------
+// Message content
+// --------------------------------------------------
 
 function MessageContent({ message }) {
   const [copied, setCopied] = useState(false);
@@ -193,42 +74,67 @@ function MessageContent({ message }) {
   return (
     <div className="group min-w-0">
       <div className="whitespace-pre-wrap text-sm leading-7 text-foreground">
-        {message.content.split(/(\*\*.*?\*\*|```[\s\S]*?```)/g).map((part, index) => {
-          if (part.startsWith("**") && part.endsWith("**")) {
-            return (
-              <strong key={index} className="font-bold">
-                {part.slice(2, -2)}
-              </strong>
-            );
-          }
+        {message.content
+          .split(/(\*\*.*?\*\*|```[\s\S]*?```)/g)
+          .map((part, index) => {
+            if (part.startsWith("**") && part.endsWith("**")) {
+              return (
+                <strong key={index} className="font-bold">
+                  {part.slice(2, -2)}
+                </strong>
+              );
+            }
 
-          if (part.startsWith("```")) {
-            const code = part.replace(/^```[a-z]*\n?/i, "").replace(/```$/, "");
-            return (
-              <pre
-                key={index}
-                className="my-3 overflow-x-auto rounded-xl bg-app p-4 text-xs leading-6 text-foreground"
-              >
-                <code>{code}</code>
-              </pre>
-            );
-          }
+            if (part.startsWith("```")) {
+              const code = part
+                .replace(/^```[a-z]*\n?/i, "")
+                .replace(/```$/, "");
 
-          return <span key={index}>{part}</span>;
-        })}
+              return (
+                <pre
+                  key={index}
+                  className="my-3 overflow-x-auto rounded-xl bg-app p-4 text-xs leading-6 text-foreground"
+                >
+                  <code>{code}</code>
+                </pre>
+              );
+            }
+
+            return <span key={index}>{part}</span>;
+          })}
       </div>
 
       {message.sources?.length > 0 && (
         <div className="mt-4 rounded-xl border border-border bg-app p-3">
-          <p className="mb-2 flex items-center gap-2 text-xs font-semibold text-foreground">
+          <p className="mb-3 flex items-center gap-2 text-xs font-semibold text-foreground">
             <FiFileText size={14} />
-            Sources
+            Retrieved sources
           </p>
-          {message.sources.map((source, index) => (
-            <p key={index} className="text-xs text-muted">
-              {source}
-            </p>
-          ))}
+
+          <div className="space-y-3">
+            {message.sources.map((source, index) => (
+              <div
+                key={source.chunk_id || source.document_id || index}
+                className="rounded-lg border border-border bg-surface p-3"
+              >
+                <p className="text-xs font-semibold text-foreground">
+                  {source.title || "Course document"}
+                </p>
+
+                {source.page_number != null && (
+                  <p className="mt-1 text-[10px] text-brand-hover">
+                    Page {source.page_number}
+                  </p>
+                )}
+
+                {source.content && (
+                  <p className="mt-2 text-xs leading-5 text-muted">
+                    {source.content}
+                  </p>
+                )}
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
@@ -236,7 +142,7 @@ function MessageContent({ message }) {
         <button
           type="button"
           onClick={copyMessage}
-          className="mt-2 flex items-center gap-1.5 text-[11px] text-muted opacity-100 transition hover:text-brand-hover sm:opacity-0 sm:group-hover:opacity-100"
+          className="mt-2 flex items-center gap-1.5 text-[11px] text-muted transition hover:text-brand-hover"
         >
           {copied ? <FiCheck size={13} /> : <FiCopy size={13} />}
           {copied ? "Copied" : "Copy response"}
@@ -246,234 +152,164 @@ function MessageContent({ message }) {
   );
 }
 
-
-const initialDocuments = [
-  {
-    id: 1,
-    name: "DBMS_Notes.pdf",
-    course: "Database Management Systems",
-    size: "2.4 MB",
-    uploadedAt: "Oct 25, 2026",
-  },
-  {
-    id: 2,
-    name: "Operating_Systems_Unit_1.pdf",
-    course: "Operating Systems",
-    size: "1.8 MB",
-    uploadedAt: "Oct 24, 2026",
-  },
-  {
-    id: 3,
-    name: "DSA_Revision.pdf",
-    course: "Data Structures & Algorithms",
-    size: "3.1 MB",
-    uploadedAt: "Oct 22, 2026",
-  },
-];
-
-function DocumentsSection() {
-  const [documents, setDocuments] = useState(initialDocuments);
-
-  function handleUpload(event) {
-    const files = Array.from(event.target.files || []);
-
-    const newDocuments = files
-      .filter((file) => file.type === "application/pdf")
-      .map((file) => ({
-        id: Date.now() + Math.random(),
-        name: file.name,
-        course: "General Study Material",
-        size: `${(file.size / (1024 * 1024)).toFixed(2)} MB`,
-        uploadedAt: new Date().toLocaleDateString("en-IN", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }),
-      }));
-
-    setDocuments((prev) => [...newDocuments, ...prev]);
-    event.target.value = "";
-  }
-
-  function handleDelete(id) {
-    setDocuments((prev) => prev.filter((doc) => doc.id !== id));
-  }
-
-  return (
-    <section className="mx-4 mb-5 rounded-2xl border border-border bg-surface p-4 sm:mx-5 sm:p-5">
-      {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <div className="flex items-center gap-2">
-            <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
-              <FiFileText size={18} />
-            </div>
-
-            <div>
-              <h2 className="text-sm font-bold text-foreground">
-                My Documents
-              </h2>
-              <p className="mt-0.5 text-[11px] text-muted">
-                Manage your study materials
-              </p>
-            </div>
-          </div>
-        </div>
-
-        <span className="rounded-full bg-brand-wash px-3 py-1.5 text-xs font-semibold text-brand-hover">
-          {documents.length} {documents.length === 1 ? "document" : "documents"}
-        </span>
-      </div>
-
-      {/* Upload area */}
-      <label className="mt-5 flex cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-brand/40 bg-brand-wash/30 px-4 py-6 text-center transition hover:border-brand hover:bg-brand-wash/60">
-        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
-          <FiPlus size={20} />
-        </div>
-
-        <p className="mt-3 text-sm font-semibold text-foreground">
-          Upload study materials
-        </p>
-
-        <p className="mt-1 text-xs text-muted">
-          Select PDF files from your device
-        </p>
-
-        <span className="mt-3 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white">
-          Upload PDF
-        </span>
-
-        <input
-          type="file"
-          accept=".pdf,application/pdf"
-          multiple
-          onChange={handleUpload}
-          className="hidden"
-        />
-      </label>
-
-      {/* Document list */}
-      <div className="mt-5">
-        <p className="mb-3 text-[10px] font-bold uppercase tracking-[0.14em] text-muted">
-          Uploaded files
-        </p>
-
-        {documents.length > 0 ? (
-          <div className="space-y-2">
-            {documents.map((document) => (
-              <div
-                key={document.id}
-                className="group flex items-center gap-3 rounded-xl border border-border bg-app p-3 transition hover:border-brand/40"
-              >
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
-                  <FiFileText size={19} />
-                </div>
-
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs font-semibold text-foreground">
-                    {document.name}
-                  </p>
-
-                  <p className="mt-1 truncate text-[10px] text-muted">
-                    {document.course}
-                  </p>
-
-                  <p className="mt-1 text-[10px] text-muted">
-                    {document.size} · {document.uploadedAt}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={() => handleDelete(document.id)}
-                  title="Delete document"
-                  aria-label={`Delete ${document.name}`}
-                  className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-muted transition hover:bg-error/10 hover:text-error"
-                >
-                  <FiTrash2 size={15} />
-                </button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <div className="rounded-xl bg-app px-4 py-8 text-center">
-            <FiFileText className="mx-auto text-muted" size={24} />
-            <p className="mt-2 text-sm font-semibold text-foreground">
-              No documents uploaded
-            </p>
-            <p className="mt-1 text-xs text-muted">
-              Upload your study materials to get started.
-            </p>
-          </div>
-        )}
-      </div>
-
-      <p className="mt-4 text-[10px] leading-5 text-muted">
-        Demo mode: files are not sent to the RAG service or permanently stored.
-      </p>
-    </section>
-  );
-}
-
+// --------------------------------------------------
+// Main AI Tutor
+// --------------------------------------------------
 
 export default function AITutor() {
-  const [conversations, setConversations] = useState(initialConversations);
-  const [activeConversation, setActiveConversation] = useState(null);
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState("");
-  const [selectedMode, setSelectedMode] = useState("explain");
+  // Course and topic state
+  const [courses, setCourses] = useState([]);
+  const [topics, setTopics] = useState([]);
+
   const [selectedCourse, setSelectedCourse] = useState("");
   const [selectedTopic, setSelectedTopic] = useState("");
+
+  const [coursesLoading, setCoursesLoading] = useState(true);
+  const [topicsLoading, setTopicsLoading] = useState(false);
+  const [contextError, setContextError] = useState("");
+
+  // Chat state
+  const [messages, setMessages] = useState([]);
+  const [input, setInput] = useState("");
   const [isTyping, setIsTyping] = useState(false);
-  const [search, setSearch] = useState("");
+  const [chatError, setChatError] = useState("");
+
+  // UI state
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [showContext, setShowContext] = useState(true);
 
   const textareaRef = useRef(null);
   const messagesEndRef = useRef(null);
 
-  const selectedCourseData = courses.find(
-    (course) => course.id === selectedCourse
-  );
+  const hasMessages = messages.length > 0;
 
-  const filteredConversations = conversations.filter((conversation) =>
-    conversation.title.toLowerCase().includes(search.toLowerCase())
-  );
+  // --------------------------------------------------
+  // Fetch enrolled courses
+  // --------------------------------------------------
 
   useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    let cancelled = false;
+
+    async function fetchCourses() {
+      try {
+        setCoursesLoading(true);
+        setContextError("");
+
+        const response = await api.get("/me/courses");
+
+        if (!cancelled) {
+          setCourses(response.data || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setContextError(
+            getErrorMessage(error, "Failed to load your courses.")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setCoursesLoading(false);
+        }
+      }
+    }
+
+    fetchCourses();
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  // --------------------------------------------------
+  // Fetch topics when course changes
+  // --------------------------------------------------
+
+  useEffect(() => {
+    if (!selectedCourse) {
+      setTopics([]);
+      setSelectedTopic("");
+      return;
+    }
+
+    let cancelled = false;
+
+    async function fetchTopics() {
+      try {
+        setTopicsLoading(true);
+        setContextError("");
+        setTopics([]);
+        setSelectedTopic("");
+
+        const response = await api.get(
+          `/me/courses/${selectedCourse}/mastery`
+        );
+
+        if (!cancelled) {
+          setTopics(response.data.topics || []);
+        }
+      } catch (error) {
+        if (!cancelled) {
+          setTopics([]);
+          setContextError(
+            getErrorMessage(error, "Failed to load course topics.")
+          );
+        }
+      } finally {
+        if (!cancelled) {
+          setTopicsLoading(false);
+        }
+      }
+    }
+
+    fetchTopics();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedCourse]);
+
+  // --------------------------------------------------
+  // Scroll to latest message
+  // --------------------------------------------------
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
   }, [messages, isTyping]);
 
+  // --------------------------------------------------
+  // Start new chat
+  // --------------------------------------------------
+
   function startNewChat() {
-    setActiveConversation(null);
     setMessages([]);
     setInput("");
-    setSelectedMode("explain");
+    setChatError("");
     setSidebarOpen(false);
+
+    if (textareaRef.current) {
+      textareaRef.current.style.height = "auto";
+    }
   }
 
-  function openConversation(conversation) {
-    setActiveConversation(conversation.id);
-    setMessages([
-      createMessage(
-        "user",
-        conversation.preview
-      ),
-      createMessage(
-        "assistant",
-        "This is a preview of your previous conversation. Full conversation history will be connected to persistent storage during backend integration."
-      ),
-    ]);
-    setSidebarOpen(false);
-  }
+  // --------------------------------------------------
+  // Change course
+  // --------------------------------------------------
 
   function handleCourseChange(courseId) {
     setSelectedCourse(courseId);
     setSelectedTopic("");
   }
 
-  function handleSend(customPrompt) {
-    const question = (customPrompt || input).trim();
+  // --------------------------------------------------
+  // Send message to AI Tutor
+  // --------------------------------------------------
+
+  async function handleSend(event) {
+    event?.preventDefault();
+
+    const question = input.trim();
 
     if (!question || isTyping) return;
 
@@ -481,59 +317,78 @@ export default function AITutor() {
 
     setMessages((prev) => [...prev, userMessage]);
     setInput("");
+    setChatError("");
     setIsTyping(true);
 
     if (textareaRef.current) {
       textareaRef.current.style.height = "auto";
     }
 
-    const currentCourse = selectedCourseData?.name || "";
-    const currentTopic = selectedTopic;
-
-    const currentConversationId = activeConversation || Date.now();
-
-    if (!activeConversation) {
-      setActiveConversation(currentConversationId);
-
-      setConversations((prev) => [
-        {
-          id: currentConversationId,
-          title: question.length > 32
-            ? `${question.slice(0, 32)}...`
-            : question,
-          preview: question,
-          date: "Just now",
-        },
-        ...prev,
-      ]);
-    }
-
-    setTimeout(() => {
-      const response = getMockResponse(
+    try {
+      const response = await api.post("/ai-tutor/query", {
         question,
-        selectedMode,
-        currentCourse,
-        currentTopic
+        context: {
+          course_id: selectedCourse
+            ? Number(selectedCourse)
+            : null,
+
+          topic_id: selectedTopic
+            ? Number(selectedTopic)
+            : null,
+        },
+      });
+
+      const result = response.data;
+
+      const answer =
+        result?.answer ||
+        result?.response ||
+        result?.message;
+
+      if (!answer || typeof answer !== "string") {
+        throw new Error(
+          "The AI Tutor returned an unexpected response."
+        );
+      }
+
+      const assistantMessage = createMessage(
+        "assistant",
+        answer,
+        {
+          sources: Array.isArray(result.sources)
+            ? result.sources
+            : [],
+        }
       );
 
-      setMessages((prev) => [
-        ...prev,
-        createMessage("assistant", response.content, {
-          sources: response.sources,
-        }),
-      ]);
-
+      setMessages((prev) => [...prev, assistantMessage]);
+    } catch (error) {
+      setChatError(
+        getErrorMessage(
+          error,
+          "Unable to get a response. Please try again."
+        )
+      );
+    } finally {
       setIsTyping(false);
-    }, 1200);
+    }
   }
+
+  // --------------------------------------------------
+  // Input handling
+  // --------------------------------------------------
 
   function handleInputChange(event) {
     setInput(event.target.value);
 
     const textarea = textareaRef.current;
+
     if (textarea) {
       textarea.style.height = "auto";
-      textarea.style.height = `${Math.min(textarea.scrollHeight, 140)}px`;
+      textarea.style.height = `${Math.min(
+        textarea.scrollHeight,
+        140
+      )}px`;
     }
   }
 
@@ -544,40 +399,42 @@ export default function AITutor() {
     }
   }
 
-  function deleteConversation(id) {
-    setConversations((prev) => prev.filter((item) => item.id !== id));
-
-    if (activeConversation === id) {
-      startNewChat();
-    }
-  }
-
-  const hasMessages = messages.length > 0;
+  // --------------------------------------------------
+  // UI
+  // --------------------------------------------------
 
   return (
     <div className="mx-auto flex h-[calc(100dvh-7rem)] max-w-[1600px] min-h-[580px] gap-4 overflow-hidden">
+
       {/* Mobile sidebar backdrop */}
+
       {sidebarOpen && (
         <button
           type="button"
-          aria-label="Close conversation sidebar"
+          aria-label="Close sidebar"
           onClick={() => setSidebarOpen(false)}
           className="fixed inset-0 z-30 bg-black/30 lg:hidden"
         />
       )}
 
-      {/* Conversation sidebar */}
+      {/* Sidebar */}
+
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col border-r border-border bg-surface p-4 transition-transform lg:relative lg:inset-auto lg:z-auto lg:flex lg:translate-x-0 lg:rounded-panel lg:border lg:border-border ${
+        className={`fixed inset-y-0 left-0 z-40 flex w-[280px] flex-col border-r border-border bg-surface p-4 transition-transform lg:relative lg:inset-auto lg:z-auto lg:flex lg:translate-x-0 lg:rounded-panel lg:border ${
           sidebarOpen ? "translate-x-0" : "-translate-x-full"
         }`}
       >
         <div className="mb-5 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <TutorAvatar />
+
             <div>
-              <p className="text-sm font-bold text-foreground">AI Tutor</p>
-              <p className="text-[11px] text-muted">Learning assistant</p>
+              <p className="text-sm font-bold text-foreground">
+                AI Tutor
+              </p>
+              <p className="text-[11px] text-muted">
+                Learning assistant
+              </p>
             </div>
           </div>
 
@@ -599,83 +456,46 @@ export default function AITutor() {
           New conversation
         </button>
 
-        <div className="relative mt-5">
-          <FiSearch
-            size={15}
-            className="absolute left-3 top-1/2 -translate-y-1/2 text-muted"
-          />
-          <input
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search conversations"
-            className="h-10 w-full rounded-xl border border-border bg-app pl-9 pr-3 text-xs text-foreground outline-none placeholder:text-muted focus:border-brand"
-          />
-        </div>
-
-        <div className="mt-6 flex-1 overflow-y-auto">
+        <div className="mt-6 flex-1">
           <p className="mb-3 px-2 text-[10px] font-bold uppercase tracking-wider text-muted">
-            Recent conversations
+            Current session
           </p>
 
-          <div className="space-y-1">
-            {filteredConversations.map((conversation) => (
-              <div
-                key={conversation.id}
-                className={`group flex items-center gap-2 rounded-xl px-3 py-3 transition ${
-                  activeConversation === conversation.id
-                    ? "bg-brand-wash"
-                    : "hover:bg-app"
-                }`}
-              >
-                <button
-                  type="button"
-                  onClick={() => openConversation(conversation)}
-                  className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                >
-                  <FiMessageSquare
-                    size={15}
-                    className="shrink-0 text-muted"
-                  />
-                  <span className="truncate text-xs font-medium text-foreground">
-                    {conversation.title}
-                  </span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => deleteConversation(conversation.id)}
-                  aria-label="Delete conversation"
-                  className="shrink-0 rounded-md p-1 text-muted opacity-100 hover:bg-error/10 hover:text-error sm:opacity-0 sm:group-hover:opacity-100"
-                >
-                  <FiTrash2 size={13} />
-                </button>
-              </div>
-            ))}
-
-            {filteredConversations.length === 0 && (
-              <p className="px-3 py-4 text-xs text-muted">
-                No conversations found.
+          <div className="rounded-xl bg-brand-wash p-3">
+            <div className="flex items-center gap-2">
+              <HiMiniSparkles
+                size={16}
+                className="text-brand-hover"
+              />
+              <p className="text-xs font-semibold text-foreground">
+                Learning assistant
               </p>
-            )}
+            </div>
+
+            <p className="mt-2 text-[11px] leading-5 text-muted">
+              Ask follow-up questions to understand concepts more deeply.
+            </p>
           </div>
         </div>
 
-        <div className="mt-4 rounded-xl bg-brand-wash p-3">
-          <div className="flex items-center gap-2">
-            <HiMiniSparkles size={16} className="text-brand-hover" />
-            <p className="text-xs font-semibold text-foreground">
-              Learning tip
-            </p>
-          </div>
-          <p className="mt-2 text-[11px] leading-5 text-muted">
-            Ask follow-up questions to understand concepts more deeply.
+        <div className="mt-4 rounded-xl border border-border p-3">
+          <p className="text-xs font-semibold text-foreground">
+            Messages in this chat
+          </p>
+
+          <p className="mt-1 text-xs text-muted">
+            {messages.filter((message) => message.role === "user").length}{" "}
+            questions asked
           </p>
         </div>
       </aside>
 
       {/* Main chat */}
+
       <main className="flex min-w-0 flex-1 flex-col overflow-hidden rounded-panel border border-border bg-surface">
+
         {/* Header */}
+
         <header className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-3 sm:px-5">
           <div className="flex min-w-0 items-center gap-3">
             <button
@@ -692,63 +512,86 @@ export default function AITutor() {
               <h1 className="truncate text-sm font-bold text-foreground">
                 MasterPath AI Tutor
               </h1>
+
               <p className="mt-0.5 text-[11px] text-muted">
                 Your personal learning companion
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            <span className="flex items-center gap-1.5 rounded-full bg-success/10 px-2.5 py-1.5 text-[10px] font-semibold text-success">
-              <span className="h-1.5 w-1.5 rounded-full bg-success" />
-              Demo mode
-            </span>
+          <button
+            type="button"
+            onClick={() => setShowContext((prev) => !prev)}
+            className="flex h-9 items-center gap-2 rounded-xl border border-border px-3 text-xs font-semibold text-foreground hover:border-brand"
+          >
+            Context
 
-            <button
-              type="button"
-              onClick={() => setShowContext((prev) => !prev)}
-              className="flex h-9 items-center gap-2 rounded-xl border border-border px-3 text-xs font-semibold text-foreground hover:border-brand"
-            >
-              Context
-              <FiChevronDown
-                size={14}
-                className={`transition ${showContext ? "rotate-180" : ""}`}
-              />
-            </button>
-          </div>
+            <FiChevronDown
+              size={14}
+              className={`transition ${
+                showContext ? "rotate-180" : ""
+              }`}
+            />
+          </button>
         </header>
 
-        {/* Context controls */}
+        {/* Course and topic context */}
+
         {showContext && (
           <div className="flex flex-wrap items-center gap-3 border-b border-border bg-app/50 px-4 py-3 sm:px-5">
+
+            {/* Course selector */}
+
             <div className="flex items-center gap-2">
               <FiBookOpen size={15} className="text-muted" />
+
               <select
                 value={selectedCourse}
-                onChange={(e) => handleCourseChange(e.target.value)}
-                className="h-9 max-w-[210px] rounded-lg border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-brand"
+                onChange={(event) =>
+                  handleCourseChange(event.target.value)
+                }
+                disabled={coursesLoading}
+                className="h-9 max-w-[230px] rounded-lg border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-brand disabled:opacity-50"
               >
-                <option value="">All courses</option>
+                <option value="">
+                  {coursesLoading
+                    ? "Loading courses..."
+                    : "All courses"}
+                </option>
+
                 {courses.map((course) => (
                   <option key={course.id} value={course.id}>
-                    {course.name}
+                    {course.code} - {course.name}
                   </option>
                 ))}
               </select>
             </div>
 
+            {/* Topic selector */}
+
             <div className="flex items-center gap-2">
               <FiTarget size={15} className="text-muted" />
+
               <select
                 value={selectedTopic}
-                onChange={(e) => setSelectedTopic(e.target.value)}
-                disabled={!selectedCourse}
-                className="h-9 max-w-[180px] rounded-lg border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-50"
+                onChange={(event) =>
+                  setSelectedTopic(event.target.value)
+                }
+                disabled={!selectedCourse || topicsLoading}
+                className="h-9 max-w-[210px] rounded-lg border border-border bg-surface px-2 text-xs text-foreground outline-none focus:border-brand disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <option value="">All topics</option>
-                {selectedCourseData?.topics.map((topic) => (
-                  <option key={topic} value={topic}>
-                    {topic}
+                <option value="">
+                  {topicsLoading
+                    ? "Loading topics..."
+                    : "All topics"}
+                </option>
+
+                {topics.map((topic) => (
+                  <option
+                    key={topic.topic_id}
+                    value={topic.topic_id}
+                  >
+                    {topic.topic_name}
                   </option>
                 ))}
               </select>
@@ -763,14 +606,22 @@ export default function AITutor() {
                 Clear topic
               </button>
             )}
+
+            {contextError && (
+              <p className="w-full text-xs text-error">
+                {contextError}
+              </p>
+            )}
           </div>
         )}
 
-        {/* Chat messages */}
-        {selectedMode === "documents" && <DocumentsSection />}
+        {/* Messages */}
+
         <div className="min-h-0 flex-1 overflow-y-auto">
+
           {!hasMessages ? (
             <div className="mx-auto flex min-h-full w-full max-w-3xl flex-col justify-center px-5 py-8 sm:px-8">
+
               <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-brand-soft text-brand-hover">
                 <HiMiniSparkles size={27} />
               </div>
@@ -780,44 +631,32 @@ export default function AITutor() {
               </h2>
 
               <p className="mx-auto mt-3 max-w-md text-center text-sm leading-6 text-muted">
-                Ask questions, understand difficult concepts, practice
-                problems, or get help with your coursework.
+                Ask questions, understand difficult concepts, and get help
+                with your coursework.
               </p>
 
-              <div className="mt-8 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                {suggestions.map((suggestion) => {
-                  const Icon = suggestion.icon;
+              <div className="mx-auto mt-8 w-full max-w-md rounded-2xl border border-border bg-app p-4">
+                <div className="flex items-center gap-2">
+                  <FiBookOpen
+                    size={17}
+                    className="text-brand-hover"
+                  />
 
-                  return (
-                    <button
-                      type="button"
-                      key={suggestion.title}
-                      onClick={() => handleSend(suggestion.prompt)}
-                      className="group rounded-card border border-border bg-surface p-4 text-left transition hover:border-brand/60 hover:bg-brand-wash/30"
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
-                          <Icon size={18} />
-                        </div>
-                        <FiArrowUpRight
-                          size={16}
-                          className="text-muted transition group-hover:text-brand-hover"
-                        />
-                      </div>
+                  <p className="text-xs font-semibold text-foreground">
+                    Personalised learning
+                  </p>
+                </div>
 
-                      <h3 className="mt-4 text-sm font-bold text-foreground">
-                        {suggestion.title}
-                      </h3>
-                      <p className="mt-1 text-xs leading-5 text-muted">
-                        {suggestion.description}
-                      </p>
-                    </button>
-                  );
-                })}
+                <p className="mt-2 text-xs leading-5 text-muted">
+                  Select a course or topic above to give the AI Tutor
+                  additional learning context. You can also ask general
+                  questions without selecting either.
+                </p>
               </div>
             </div>
           ) : (
             <div className="mx-auto w-full max-w-3xl space-y-7 px-4 py-6 sm:px-8 sm:py-8">
+
               {messages.map((message) => (
                 <div
                   key={message.id}
@@ -825,7 +664,9 @@ export default function AITutor() {
                     message.role === "user" ? "justify-end" : ""
                   }`}
                 >
-                  {message.role === "assistant" && <TutorAvatar small />}
+                  {message.role === "assistant" && (
+                    <TutorAvatar small />
+                  )}
 
                   <div
                     className={`min-w-0 max-w-[88%] ${
@@ -848,6 +689,7 @@ export default function AITutor() {
               {isTyping && (
                 <div className="flex items-center gap-3">
                   <TutorAvatar small />
+
                   <div className="flex items-center gap-1 rounded-xl bg-app px-4 py-3">
                     <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.2s]" />
                     <span className="h-2 w-2 animate-bounce rounded-full bg-brand [animation-delay:-0.1s]" />
@@ -861,25 +703,23 @@ export default function AITutor() {
           )}
         </div>
 
+        {/* Chat error */}
+
+        {chatError && (
+          <div className="border-t border-border bg-error/5 px-4 py-2">
+            <p className="mx-auto max-w-3xl text-xs text-error">
+              {chatError}
+            </p>
+          </div>
+        )}
+
         {/* Composer */}
+
         <div className="border-t border-border bg-surface p-3 sm:p-5">
           <div className="mx-auto max-w-3xl">
-            <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
-              {modes.map((mode) => (
-                <ModeButton
-                  key={mode.id}
-                  mode={mode}
-                  active={selectedMode === mode.id}
-                  onClick={() => setSelectedMode(mode.id)}
-                />
-              ))}
-            </div>
 
             <form
-              onSubmit={(e) => {
-                e.preventDefault();
-                handleSend();
-              }}
+              onSubmit={handleSend}
               className="rounded-2xl border border-border bg-app p-3 transition focus-within:border-brand focus-within:ring-2 focus-within:ring-brand/10"
             >
               <textarea
@@ -888,34 +728,20 @@ export default function AITutor() {
                 onChange={handleInputChange}
                 onKeyDown={handleKeyDown}
                 rows={1}
-                placeholder={
-                  selectedMode === "documents"
-                    ? "Ask a question from your course materials..."
-                    : "Ask anything about your studies..."
-                }
-                className="max-h-[140px] min-h-[42px] w-full resize-none bg-transparent px-1 py-2 text-sm text-foreground outline-none placeholder:text-muted"
+                disabled={isTyping}
+                placeholder="Ask anything about your studies..."
+                className="max-h-[140px] min-h-[42px] w-full resize-none bg-transparent px-1 py-2 text-sm text-foreground outline-none placeholder:text-muted disabled:opacity-60"
               />
 
               <div className="mt-2 flex items-center justify-between">
-                <div className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    disabled
-                    title="File upload will be enabled during backend integration"
-                    className="flex h-8 items-center gap-2 rounded-lg px-2 text-xs text-muted opacity-50"
-                  >
-                    <FiPaperclip size={16} />
-                    <span className="hidden sm:inline">Attach file</span>
-                  </button>
-                  <span className="hidden text-[10px] text-muted sm:inline">
-                    Enter to send · Shift + Enter for new line
-                  </span>
-                </div>
+                <span className="hidden text-[10px] text-muted sm:inline">
+                  Enter to send · Shift + Enter for new line
+                </span>
 
                 <button
                   type="submit"
                   disabled={!input.trim() || isTyping}
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
+                  className="ml-auto flex h-9 w-9 items-center justify-center rounded-xl bg-brand text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   <FiSend size={16} />
                 </button>
