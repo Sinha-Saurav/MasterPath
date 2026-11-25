@@ -1,6 +1,9 @@
 
 import { supabase } from "../config/supabase.js";
-import { getQuizQuestions } from "../services/quizQuestion.service.js";
+import {
+    generateAndSaveQuestions,
+    QuizGenerationError,
+} from "../services/quizGeneration.service.js";
 
 const MAX_QUESTIONS = 20;
 
@@ -53,7 +56,12 @@ async function getQuizQuestionsWithAnswers(quizId) {
 // POST /api/quizzes
 export async function startQuiz(req, res, next) {
     try {
-        const { course_id, topic_id = null, question_count = 10 } = req.body ?? {};
+        const {
+    course_id,
+    topic_id = null,
+    question_count = 10,
+    difficulty = "adaptive",
+} = req.body ?? {};
 
         if (!isPositiveInteger(course_id)) {
             return sendError(res, 400, "INVALID_COURSE_ID",
@@ -70,9 +78,18 @@ export async function startQuiz(req, res, next) {
                 `question_count must be between 1 and ${MAX_QUESTIONS}.`);
         }
 
+        if (!["easy", "medium", "hard", "adaptive"].includes(difficulty)) {
+    return sendError(
+        res,
+        400,
+        "INVALID_DIFFICULTY",
+        "difficulty must be easy, medium, hard, or adaptive."
+    );
+}
+
         const { data: course, error: courseError } = await supabase
             .from("courses")
-            .select("id")
+            .select("id, name")
             .eq("id", course_id)
             .maybeSingle();
 
@@ -128,32 +145,45 @@ export async function startQuiz(req, res, next) {
             });
         }
 
-        const questions = await getQuizQuestions({
+        
+        // Fetch valid topics for the selected course.
+        let topicsQuery = supabase
+            .from("topics")
+            .select("id, name, unit")
+            .eq("course_id", course_id);
+
+        if (topic_id !== null) {
+            topicsQuery = topicsQuery.eq("id", topic_id);
+        }
+
+        const { data: topics, error: topicsError } =
+            await topicsQuery;
+
+        if (topicsError) return next(topicsError);
+
+        if (!topics?.length) {
+            return sendError(
+                res,
+                422,
+                "NO_TOPICS_AVAILABLE",
+                "No topics are available for this course."
+            );
+        }
+
+        // Generate and save questions using Gemini.
+        const generated = await generateAndSaveQuestions({
+            courseName: course.name,
+            topics,
+            studentId: req.user.id,
             courseId: course_id,
             topicId: topic_id,
-            studentId: req.user.id,
+            difficulty,
             questionCount: question_count,
         });
 
-        if (!questions.length) {
-            return sendError(res, 422, "NO_QUESTIONS_AVAILABLE",
-                "No eligible MCQs are available for this selection.");
-        }
+        const questions = generated.questions;
 
-        // The question bank uses string options and correct_answer values.
-        const validQuestions = questions.filter(q =>
-            q.type === "mcq" &&
-            Array.isArray(q.options) &&
-            q.options.length >= 2 &&
-            typeof q.correct_answer === "string" &&
-            q.options.includes(q.correct_answer)
-        );
-
-        if (!validQuestions.length) {
-            return sendError(res, 422, "INVALID_QUESTION_BANK",
-                "No questions have a valid MCQ answer format.");
-        }
-
+        // Create the quiz after successful question generation.
         const { data: quiz, error: quizError } = await supabase
             .from("quizzes")
             .insert({
@@ -165,9 +195,17 @@ export async function startQuiz(req, res, next) {
             .select("id, course_id, topic_id, status, created_at")
             .single();
 
-        if (quizError) return next(quizError);
+        if (quizError) {
+            // Remove generated questions if quiz creation fails.
+            await supabase
+                .from("questions")
+                .delete()
+                .in("id", questions.map(q => q.id));
 
-        const assignments = validQuestions.map((q, index) => ({
+            return next(quizError);
+        }
+
+        const assignments = questions.map((q, index) => ({
             quiz_id: quiz.id,
             question_id: q.id,
             position: index + 1,
@@ -178,19 +216,38 @@ export async function startQuiz(req, res, next) {
             .insert(assignments);
 
         if (assignmentError) {
-            // Avoid leaving an empty quiz if assignment insertion fails.
-            await supabase.from("quizzes").delete().eq("id", quiz.id);
+            await supabase
+                .from("quizzes")
+                .delete()
+                .eq("id", quiz.id);
+
+            await supabase
+                .from("questions")
+                .delete()
+                .in("id", questions.map(q => q.id));
+
             return next(assignmentError);
         }
 
         return res.status(201).json({
             resumed: false,
             quiz,
-            question_count: validQuestions.length,
+            question_count: questions.length,
+            difficulty: generated.difficulty,
         });
+
     } catch (error) {
-        return next(error);
+    if (error instanceof QuizGenerationError) {
+        return sendError(
+            res,
+            error.status,
+            error.code,
+            error.message
+        );
     }
+
+    return next(error);
+}
 }
 
 // GET /api/quizzes/:id

@@ -12,7 +12,6 @@ const tabs = [
   { id: "topics", label: "Topics", icon: FiLayers },
   { id: "quizzes", label: "Quizzes", icon: FiClipboard },
   { id: "progress", label: "Progress", icon: FiTrendingUp },
-  { id: "resources", label: "Resources", icon: FiFileText },
 ];
 
 export default function CourseTabs({

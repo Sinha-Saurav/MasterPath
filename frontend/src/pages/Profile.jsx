@@ -1,33 +1,17 @@
 
 import { useState } from "react";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   FiUser,
   FiMail,
-  FiPhone,
   FiBookOpen,
   FiCalendar,
   FiEdit2,
-  FiCamera,
-  FiTarget,
-  FiClock,
-  FiAward,
-  FiShield,
-  FiLock,
-  FiChevronRight,
   FiCheck,
   FiX,
+  FiRefreshCw,
 } from "react-icons/fi";
-
-const initialProfile = {
-  fullName: "Saurav Sinha",
-  email: "saurav@example.com",
-  phone: "",
-  college: "HMR Institute of Technology & Management",
-  degree: "B.Tech — Information Technology",
-  academicYear: "3rd Year",
-  studyGoal: "2 hours",
-  learningStyle: "Visual learning",
-};
+import api from "../services/api";
 
 const inputClass =
   "w-full rounded-xl border border-border bg-app px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-focus/30";
@@ -43,7 +27,15 @@ function SectionHeading({ title, description }) {
   );
 }
 
-function ProfileField({ label, icon: Icon, value, editing, onChange, placeholder }) {
+function ProfileField({
+  label,
+  icon: Icon,
+  value,
+  editing,
+  onChange,
+  placeholder,
+  readOnly = false,
+}) {
   return (
     <div>
       <label className="mb-2 block text-xs font-semibold text-muted">
@@ -55,12 +47,12 @@ function ProfileField({ label, icon: Icon, value, editing, onChange, placeholder
           <Icon
             size={17}
             className="absolute left-3.5 top-1/2 -translate-y-1/2 text-muted"
-          />)
-        }
+          />
+        )}
 
-        {editing ? (
+        {editing && !readOnly ? (
           <input
-            value={value}
+            value={value ?? ""}
             onChange={onChange}
             placeholder={placeholder || label}
             className={`${inputClass} ${Icon ? "pl-10" : ""}`}
@@ -79,34 +71,154 @@ function ProfileField({ label, icon: Icon, value, editing, onChange, placeholder
   );
 }
 
-export default function Profile() {
-  const [profile, setProfile] = useState(initialProfile);
-  const [editing, setEditing] = useState(false);
-  const [saved, setSaved] = useState(false);
+function getErrorMessage(error) {
+  return (
+    error?.response?.data?.error?.message ||
+    error?.response?.data?.message ||
+    error?.message ||
+    "Something went wrong. Please try again."
+  );
+}
 
-  const updateField = (field, value) => {
-    setProfile((prev) => ({ ...prev, [field]: value }));
-    setSaved(false);
+export default function Profile() {
+  const queryClient = useQueryClient();
+
+  const [editing, setEditing] = useState(false);
+  const [draft, setDraft] = useState(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  // Fetch actual profile data.
+  const {
+    data: profile,
+    isLoading,
+    isError,
+    error,
+    refetch,
+  } = useQuery({
+    queryKey: ["myProfile"],
+    queryFn: async () => {
+      const { data } = await api.get("/me");
+      return data;
+    },
+  });
+
+  // Update profile through PATCH /api/me.
+  const updateMutation = useMutation({
+    mutationFn: async (updates) => {
+      const { data } = await api.patch("/me", updates);
+      return data;
+    },
+    onSuccess: (updatedProfile) => {
+      queryClient.setQueryData(["myProfile"], updatedProfile);
+      setDraft(null);
+      setEditing(false);
+      setSaveSuccess(true);
+    },
+  });
+
+  const startEditing = () => {
+    setDraft({
+      full_name: profile.full_name || "",
+      branch: profile.branch || "",
+      semester: profile.semester ?? "",
+    });
+
+    setSaveSuccess(false);
+    updateMutation.reset();
+    setEditing(true);
   };
 
-  const handleSave = () => {
-    // TODO: Connect to PATCH /api/me
-    setEditing(false);
-    setSaved(true);
+  const updateField = (field, value) => {
+    setDraft((previous) => ({
+      ...previous,
+      [field]: value,
+    }));
+
+    setSaveSuccess(false);
+    updateMutation.reset();
   };
 
   const handleCancel = () => {
-    setProfile(initialProfile);
+    setDraft(null);
     setEditing(false);
-    setSaved(false);
+    updateMutation.reset();
+    setSaveSuccess(false);
   };
 
-  const initials = profile.fullName
-    .split(" ")
+  const handleSave = () => {
+    const updates = {};
+
+    const fullName = draft.full_name.trim();
+    const branch = draft.branch.trim();
+    const semester = Number(draft.semester);
+
+    if (fullName !== (profile.full_name || "")) {
+      updates.full_name = fullName;
+    }
+
+    if (branch !== (profile.branch || "")) {
+      updates.branch = branch;
+    }
+
+    if (semester !== Number(profile.semester)) {
+      updates.semester = semester;
+    }
+
+    // Avoid sending an empty PATCH request.
+    if (Object.keys(updates).length === 0) {
+      setEditing(false);
+      setDraft(null);
+      return;
+    }
+
+    updateMutation.mutate(updates);
+  };
+
+  const initials = (profile?.full_name || "S")
+    .trim()
+    .split(/\s+/)
     .map((word) => word[0])
     .join("")
     .slice(0, 2)
     .toUpperCase();
+
+  const roleLabel = profile?.role
+    ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
+    : "User";
+
+  if (isLoading) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center">
+        <div className="flex items-center gap-3 text-sm text-muted">
+          <FiRefreshCw className="animate-spin" size={18} />
+          Loading your profile...
+        </div>
+      </div>
+    );
+  }
+
+  if (isError) {
+    return (
+      <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
+        <h2 className="font-heading text-lg font-bold text-foreground">
+          Couldn't load your profile
+        </h2>
+
+        <p className="mt-2 text-sm text-muted">
+          {getErrorMessage(error)}
+        </p>
+
+        <button
+          type="button"
+          onClick={() => refetch()}
+          className="mt-5 inline-flex items-center gap-2 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white transition hover:bg-brand-hover"
+        >
+          <FiRefreshCw size={15} />
+          Try Again
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="mx-auto w-full max-w-6xl space-y-6 pb-10">
@@ -116,18 +228,20 @@ export default function Profile() {
           <p className="mb-1 text-xs font-semibold uppercase tracking-[0.16em] text-brand">
             Account
           </p>
+
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
             My Profile
           </h1>
+
           <p className="mt-2 text-sm text-muted">
-            Manage your personal information and learning preferences.
+            View and manage your personal and academic information.
           </p>
         </div>
 
         {!editing ? (
           <button
             type="button"
-            onClick={() => setEditing(true)}
+            onClick={startEditing}
             className="flex h-11 items-center justify-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white shadow-sm transition hover:bg-brand-hover"
           >
             <FiEdit2 size={16} />
@@ -138,7 +252,8 @@ export default function Profile() {
             <button
               type="button"
               onClick={handleCancel}
-              className="flex h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-muted transition hover:bg-brand-wash"
+              disabled={updateMutation.isPending}
+              className="flex h-11 items-center gap-2 rounded-xl border border-border px-4 text-sm font-semibold text-muted transition hover:bg-brand-wash disabled:opacity-50"
             >
               <FiX size={16} />
               Cancel
@@ -147,19 +262,30 @@ export default function Profile() {
             <button
               type="button"
               onClick={handleSave}
-              className="flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover"
+              disabled={updateMutation.isPending}
+              className="flex h-11 items-center gap-2 rounded-xl bg-brand px-5 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <FiCheck size={17} />
-              Save Changes
+              {updateMutation.isPending ? (
+                <FiRefreshCw className="animate-spin" size={16} />
+              ) : (
+                <FiCheck size={17} />
+              )}
+              {updateMutation.isPending ? "Saving..." : "Save Changes"}
             </button>
           </div>
         )}
       </div>
 
-      {saved && (
+      {saveSuccess && (
         <div className="flex items-center gap-2 rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
           <FiCheck size={17} />
-          Profile changes saved locally. Backend integration is pending.
+          Your profile has been updated successfully.
+        </div>
+      )}
+
+      {updateMutation.isError && (
+        <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+          {getErrorMessage(updateMutation.error)}
         </div>
       )}
 
@@ -168,48 +294,38 @@ export default function Profile() {
         <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-brand-soft/50 blur-3xl" />
 
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-          <div className="group relative flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-brand-soft font-heading text-2xl font-bold text-brand-hover">
+          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-brand-soft font-heading text-2xl font-bold text-brand-hover">
             {initials || "S"}
-
-            <button
-              type="button"
-              title="Change profile picture"
-              className="absolute -bottom-2 -right-2 flex h-8 w-8 items-center justify-center rounded-xl border border-border bg-surface text-muted shadow-sm transition hover:text-brand"
-            >
-              <FiCamera size={15} />
-            </button>
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="font-heading text-xl font-bold text-foreground">
-                {profile.fullName}
+                {profile.full_name}
               </h2>
 
               <span className="rounded-full bg-brand-soft px-3 py-1 text-[10px] font-bold uppercase tracking-wider text-brand-hover">
-                Student
+                {roleLabel}
               </span>
             </div>
 
-            <p className="mt-1 text-sm text-muted">{profile.email}</p>
+            <p className="mt-1 break-all text-sm text-muted">
+              {profile.email || "Email unavailable"}
+            </p>
 
             <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-muted">
               <span className="flex items-center gap-1.5">
                 <FiBookOpen size={14} />
-                {profile.degree}
+                {profile.branch || "Branch not provided"}
               </span>
+
               <span className="flex items-center gap-1.5">
                 <FiCalendar size={14} />
-                {profile.academicYear}
+                {profile.semester
+                  ? `Semester ${profile.semester}`
+                  : "Semester not provided"}
               </span>
             </div>
-          </div>
-
-          <div className="flex items-center gap-2 self-start rounded-xl bg-brand-wash px-3 py-2 sm:self-center">
-            <FiAward size={18} className="text-brand" />
-            <span className="text-xs font-semibold text-brand-hover">
-              Active Learner
-            </span>
           </div>
         </div>
       </section>
@@ -218,171 +334,92 @@ export default function Profile() {
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <SectionHeading
           title="Personal Information"
-          description="Your basic details and academic information."
+          description="Your account and academic details."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
           <ProfileField
             label="Full Name"
             icon={FiUser}
-            value={profile.fullName}
+            value={editing ? draft.full_name : profile.full_name}
             editing={editing}
-            onChange={(e) => updateField("fullName", e.target.value)}
+            onChange={(e) => updateField("full_name", e.target.value)}
           />
 
           <ProfileField
             label="Email Address"
             icon={FiMail}
             value={profile.email}
-            editing={editing}
-            onChange={(e) => updateField("email", e.target.value)}
+            editing={false}
+            readOnly
           />
 
           <ProfileField
-            label="Phone Number"
-            icon={FiPhone}
-            value={profile.phone}
-            editing={editing}
-            placeholder="Enter phone number"
-            onChange={(e) => updateField("phone", e.target.value)}
-          />
-
-          <ProfileField
-            label="College / University"
+            label="Branch"
             icon={FiBookOpen}
-            value={profile.college}
+            value={editing ? draft.branch : profile.branch}
             editing={editing}
-            onChange={(e) => updateField("college", e.target.value)}
+            onChange={(e) => updateField("branch", e.target.value)}
+            placeholder="Enter your branch"
           />
 
-          <ProfileField
-            label="Degree / Course"
-            value={profile.degree}
-            editing={editing}
-            onChange={(e) => updateField("degree", e.target.value)}
-          />
+          <div>
+            <label className="mb-2 block text-xs font-semibold text-muted">
+              Semester
+            </label>
 
-          <ProfileField
-            label="Academic Year"
-            value={profile.academicYear}
-            editing={editing}
-            onChange={(e) => updateField("academicYear", e.target.value)}
-          />
+            {editing ? (
+              <select
+                value={draft.semester}
+                onChange={(e) =>
+                  updateField("semester", e.target.value)
+                }
+                className={inputClass}
+              >
+                <option value="">Select semester</option>
+                {Array.from({ length: 8 }, (_, index) => (
+                  <option key={index + 1} value={index + 1}>
+                    Semester {index + 1}
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <div className="flex min-h-[46px] items-center rounded-xl border border-border bg-app px-4 text-sm text-foreground">
+                {profile.semester ? (
+                  `Semester ${profile.semester}`
+                ) : (
+                  <span className="text-muted">Not provided</span>
+                )}
+              </div>
+            )}
+          </div>
         </div>
       </section>
 
-      {/* Learning preferences */}
+      {/* Account information */}
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <SectionHeading
-          title="Learning Preferences"
-          description="Customize how you want to learn with MasterPath."
+          title="Account Information"
+          description="Your MasterPath account details."
         />
 
-        <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
-          <div>
-            <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted">
-              <FiTarget size={15} />
-              Daily Study Goal
-            </label>
-
-            <select
-              disabled={!editing}
-              value={profile.studyGoal}
-              onChange={(e) => updateField("studyGoal", e.target.value)}
-              className={`${inputClass} disabled:cursor-default disabled:opacity-100`}
-            >
-              <option>30 minutes</option>
-              <option>1 hour</option>
-              <option>2 hours</option>
-              <option>3 hours</option>
-              <option>4 hours</option>
-            </select>
+        <div className="flex items-center gap-4">
+          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
+            <FiUser size={18} />
           </div>
 
-          <div>
-            <label className="mb-2 flex items-center gap-2 text-xs font-semibold text-muted">
-              <FiBookOpen size={15} />
-              Preferred Learning Style
-            </label>
-
-            <select
-              disabled={!editing}
-              value={profile.learningStyle}
-              onChange={(e) => updateField("learningStyle", e.target.value)}
-              className={`${inputClass} disabled:cursor-default disabled:opacity-100`}
-            >
-              <option>Visual learning</option>
-              <option>Reading and notes</option>
-              <option>Practice-based learning</option>
-              <option>Video learning</option>
-              <option>Mixed learning</option>
-            </select>
-          </div>
-        </div>
-
-        <div className="mt-5 flex items-start gap-3 rounded-xl bg-brand-wash p-4">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-surface text-brand">
-            <FiClock size={17} />
-          </div>
-
-          <div>
+          <div className="flex-1">
             <p className="text-sm font-semibold text-foreground">
-              Your learning journey
+              Account Role
             </p>
-            <p className="mt-1 text-xs leading-5 text-muted">
-              MasterPath can use these preferences to personalize your study
-              sessions, AI tutor responses, and learning recommendations.
+            <p className="mt-1 text-xs text-muted">
+              Your assigned role in MasterPath.
             </p>
           </div>
-        </div>
-      </section>
 
-      {/* Account security */}
-      <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
-        <SectionHeading
-          title="Account & Security"
-          description="Manage your account security."
-        />
-
-        <div className="divide-y divide-border">
-          <button
-            type="button"
-            className="flex w-full items-center gap-4 py-4 text-left transition hover:bg-brand-wash/50"
-          >
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
-              <FiLock size={18} />
-            </div>
-
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                Change Password
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                Update your account password
-              </p>
-            </div>
-
-            <FiChevronRight size={18} className="text-muted" />
-          </button>
-
-          <div className="flex items-center gap-4 py-4">
-            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
-              <FiShield size={18} />
-            </div>
-
-            <div className="flex-1">
-              <p className="text-sm font-semibold text-foreground">
-                Account Status
-              </p>
-              <p className="mt-1 text-xs text-muted">
-                Your MasterPath account is active.
-              </p>
-            </div>
-
-            <span className="rounded-full bg-success/10 px-3 py-1 text-[10px] font-bold text-success">
-              Active
-            </span>
-          </div>
+          <span className="rounded-full bg-brand-soft px-3 py-1 text-xs font-semibold text-brand-hover">
+            {roleLabel}
+          </span>
         </div>
       </section>
     </div>

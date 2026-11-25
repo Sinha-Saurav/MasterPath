@@ -1,351 +1,353 @@
 
-import { useEffect, useMemo, useState } from "react";
-import { useParams, useNavigate, useLocation } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { useNavigate, useParams } from "react-router-dom";
 import {
     FiClock,
     FiChevronLeft,
     FiChevronRight,
     FiFlag,
     FiCheckCircle,
-    FiCircle,
     FiAlertCircle,
-    FiX,
-    FiBookOpen,
-    FiTarget,
-    FiRotateCcw,
 } from "react-icons/fi";
-
-// --------------------------------------------------
-// DEMO QUIZ DATA
-// Later this will come from your quiz API.
-// --------------------------------------------------
-
-const demoQuiz = {
-    id: "dsa-basics",
-    title: "Data Structures & Algorithms",
-    course: "DSA",
-    topic: "Arrays, Linked Lists and Complexity",
-    difficulty: "Adaptive",
-    duration: 25,
-    questions: [
-        {
-            id: 1,
-            question: "What is the time complexity of accessing an element at a given index in an array?",
-            options: [
-                "O(1)",
-                "O(n)",
-                "O(log n)",
-                "O(n log n)",
-            ],
-            answer: 0,
-            explanation:
-                "Arrays provide direct index-based access because elements are stored in contiguous memory locations. Accessing an element by index takes constant time.",
-        },
-        {
-            id: 2,
-            question: "Which data structure follows the LIFO principle?",
-            options: [
-                "Queue",
-                "Stack",
-                "Linked List",
-                "Binary Tree",
-            ],
-            answer: 1,
-            explanation:
-                "A stack follows Last In, First Out. The most recently inserted element is removed first.",
-        },
-        {
-            id: 3,
-            question: "What is the worst-case time complexity of searching for an element in an unsorted array?",
-            options: [
-                "O(1)",
-                "O(log n)",
-                "O(n)",
-                "O(n log n)",
-            ],
-            answer: 2,
-            explanation:
-                "In the worst case, linear search may need to inspect every element, resulting in O(n) time complexity.",
-        },
-        {
-            id: 4,
-            question: "Which operation is generally more efficient in a singly linked list when the node reference is already known?",
-            options: [
-                "Accessing an element by index",
-                "Inserting a node after the known node",
-                "Binary searching",
-                "Random access",
-            ],
-            answer: 1,
-            explanation:
-                "When the node reference is available, insertion after it requires updating a constant number of pointers, making it O(1).",
-        },
-        {
-            id: 5,
-            question: "Which data structure is commonly used to implement Breadth-First Search (BFS)?",
-            options: [
-                "Stack",
-                "Priority Queue",
-                "Queue",
-                "Hash Set",
-            ],
-            answer: 2,
-            explanation:
-                "BFS uses a queue to process vertices in the order they are discovered, ensuring level-by-level traversal.",
-        },
-        {
-            id: 6,
-            question: "What is the time complexity of binary search on a sorted array?",
-            options: [
-                "O(n)",
-                "O(log n)",
-                "O(n²)",
-                "O(1)",
-            ],
-            answer: 1,
-            explanation:
-                "Binary search halves the remaining search space at each step, resulting in logarithmic time complexity.",
-        },
-        {
-            id: 7,
-            question: "Which traversal of a Binary Search Tree produces values in sorted order?",
-            options: [
-                "Preorder",
-                "Postorder",
-                "Level order",
-                "Inorder",
-            ],
-            answer: 3,
-            explanation:
-                "Inorder traversal visits the left subtree, root, and right subtree. For a Binary Search Tree, this produces sorted values.",
-        },
-        {
-            id: 8,
-            question: "Which data structure is best suited for implementing an undo operation?",
-            options: [
-                "Stack",
-                "Queue",
-                "Graph",
-                "Heap",
-            ],
-            answer: 0,
-            explanation:
-                "Undo operations typically reverse the most recent action first, which naturally follows the LIFO behavior of a stack.",
-        },
-        {
-            id: 9,
-            question: "What is the worst-case time complexity of inserting an element at the beginning of an array of n elements?",
-            options: [
-                "O(1)",
-                "O(log n)",
-                "O(n)",
-                "O(n²)",
-            ],
-            answer: 2,
-            explanation:
-                "Existing elements generally need to be shifted one position to make room at the beginning, requiring O(n) operations.",
-        },
-        {
-            id: 10,
-            question: "Which of the following data structures provides average-case O(1) lookup by key?",
-            options: [
-                "Binary Search Tree",
-                "Hash Table",
-                "Linked List",
-                "Stack",
-            ],
-            answer: 1,
-            explanation:
-                "A hash table uses a hash function to map keys to positions, providing average-case constant-time lookup.",
-        },
-    ],
-};
-
-// --------------------------------------------------
-// MAIN COMPONENT
-// --------------------------------------------------
+import api from "../services/api";
 
 export default function QuizAttempt() {
     const { quizId } = useParams();
     const navigate = useNavigate();
 
-    const location = useLocation();
-    const config = location.state?.config;
+    const [quiz, setQuiz] = useState(null);
+    const [questions, setQuestions] = useState([]);
+    const [courseName, setCourseName] = useState("");
+    const [topicName, setTopicName] = useState("");
 
-    const requestedCount = config?.questionCount ?? 10;
-
-    // The current demo question bank contains 10 questions.
-    const availableQuestions = demoQuiz.questions.slice(
-        0,
-        Math.min(requestedCount, demoQuiz.questions.length)
-    );
-
-    const quiz = {
-        ...demoQuiz,
-        title: config?.scope === "topic"
-            ? "Topic Practice Quiz"
-            : "Course Practice Quiz",
-        course: config?.courseId ?? demoQuiz.course,
-        topic: config?.topicId ?? demoQuiz.topic,
-        difficulty: config?.difficulty ?? "adaptive",
-        quizType: config?.quizType ?? "practice",
-        questions: availableQuestions,
-        duration: Math.max(5, availableQuestions.length * 2.5),
-    };
-
-
-    const storageKey = `masterpath-quiz-${quizId}`;
-
-    const [timeLeft, setTimeLeft] = useState(() => {
-        try {
-            const saved = JSON.parse(localStorage.getItem(storageKey));
-            return saved?.timeLeft ?? quiz.duration * 60;
-        } catch {
-            return quiz.duration * 60;
-        }
-    });
-
-    
-    const formattedTime = `${String(Math.floor(timeLeft / 60)).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
-    
-    const [currentIndex, setCurrentIndex] = useState(0);
     const [answers, setAnswers] = useState({});
     const [marked, setMarked] = useState([]);
-    const [submitted, setSubmitted] = useState(false);
+    const [currentIndex, setCurrentIndex] = useState(0);
+
+    const [timeLeft, setTimeLeft] = useState(0);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState("");
+    const [saveError, setSaveError] = useState("");
+    const [pendingSaves, setPendingSaves] = useState(0);
+    const [submitting, setSubmitting] = useState(false);
     const [showSubmitModal, setShowSubmitModal] = useState(false);
-    
+
+    // Keeps answer requests ordered per question.
+    const saveQueues = useRef(new Map());
+
+    // --------------------------------------------------
+    // LOAD QUIZ FROM BACKEND
+    // --------------------------------------------------
+
     useEffect(() => {
-        if (timeLeft <= 0 || submitted) return;
+        let active = true;
+
+        async function loadQuiz() {
+            try {
+                setLoading(true);
+                setError("");
+
+                const { data } = await api.get(`/quizzes/${quizId}`);
+
+                if (!active) return;
+
+                if (!data?.quiz || !Array.isArray(data.questions)) {
+                    throw new Error("Invalid quiz response from server.");
+                }
+
+                if (data.quiz.status !== "in_progress") {
+                    navigate(`/quizzes/${quizId}/results`, {
+                        replace: true,
+                    });
+                    return;
+                }
+
+                if (data.questions.length === 0) {
+                    throw new Error("This quiz has no questions.");
+                }
+
+                setQuiz(data.quiz);
+                setQuestions(data.questions);
+
+                // Restore answers already saved in the backend.
+                const savedAnswers = {};
+
+                data.questions.forEach((question) => {
+                    if (question.answer) {
+                        savedAnswers[question.id] = question.answer;
+                    }
+                });
+
+                setAnswers(savedAnswers);
+
+                // Keep an estimated duration based on question count.
+                setTimeLeft(data.questions.length * 150);
+
+                // Load course and topic names for the heading.
+                try {
+                    const [coursesResponse, topicsResponse] =
+                        await Promise.all([
+                            api.get("/courses"),
+                            api.get(
+                                `/courses/${data.quiz.course_id}/topics`
+                            ),
+                        ]);
+
+                    if (!active) return;
+
+                    const courses = coursesResponse.data;
+                    const topics = topicsResponse.data;
+
+                    const course = Array.isArray(courses)
+                        ? courses.find(
+                              (item) =>
+                                  String(item.id) ===
+                                  String(data.quiz.course_id)
+                          )
+                        : null;
+
+                    const topic = Array.isArray(topics)
+                        ? topics.find(
+                              (item) =>
+                                  String(item.id) ===
+                                  String(data.quiz.topic_id)
+                          )
+                        : null;
+
+                    setCourseName(
+                        course?.name ||
+                            `Course ${data.quiz.course_id}`
+                    );
+
+                    setTopicName(
+                        data.quiz.topic_id
+                            ? topic?.name || `Topic ${data.quiz.topic_id}`
+                            : "All course topics"
+                    );
+                } catch {
+                    if (!active) return;
+
+                    setCourseName(`Course ${data.quiz.course_id}`);
+                    setTopicName(
+                        data.quiz.topic_id
+                            ? `Topic ${data.quiz.topic_id}`
+                            : "All course topics"
+                    );
+                }
+            } catch (err) {
+                if (!active) return;
+
+                setError(
+                    err.response?.data?.error?.message ||
+                        err.message ||
+                        "Unable to load this quiz."
+                );
+            } finally {
+                if (active) setLoading(false);
+            }
+        }
+
+        loadQuiz();
+
+        return () => {
+            active = false;
+        };
+    }, [quizId, navigate]);
+
+    // --------------------------------------------------
+    // TIMER
+    // --------------------------------------------------
+
+    useEffect(() => {
+        if (loading || submitting || timeLeft <= 0) return;
 
         const timer = setInterval(() => {
             setTimeLeft((previous) => Math.max(0, previous - 1));
         }, 1000);
 
         return () => clearInterval(timer);
-    }, [timeLeft, submitted]);
-    // Restore unfinished demo attempt.
-    useEffect(() => {
-        try {
-            const saved = localStorage.getItem(storageKey);
+    }, [loading, submitting, timeLeft]);
 
-            if (saved) {
-                const parsed = JSON.parse(saved);
+    const formattedTime = `${String(
+        Math.floor(timeLeft / 60)
+    ).padStart(2, "0")}:${String(timeLeft % 60).padStart(2, "0")}`;
 
-                setAnswers(parsed.answers || {});
-                setMarked(parsed.marked || []);
-                setCurrentIndex(
-                    Math.min(
-                        parsed.currentIndex || 0,
-                        quiz.questions.length - 1
-                    )
-                );
-            }
-        } catch {
-            localStorage.removeItem(storageKey);
-        }
-    }, [storageKey, quiz.questions.length]);
+    // --------------------------------------------------
+    // DERIVED VALUES
+    // --------------------------------------------------
 
-    // Save unfinished attempt.
-    useEffect(() => {
-        if (submitted) return;
-
-        localStorage.setItem(
-            storageKey,
-            JSON.stringify({
-                answers,
-                marked,
-                currentIndex,
-            })
-        );
-    }, [answers, marked, currentIndex,timeLeft, submitted, storageKey]);
-
-    const currentQuestion = quiz.questions[currentIndex];
+    const currentQuestion = questions[currentIndex];
 
     const answeredCount = Object.keys(answers).length;
-    const unansweredCount = quiz.questions.length - answeredCount;
+    const unansweredCount = questions.length - answeredCount;
     const markedCount = marked.length;
 
-    const progress = (answeredCount / quiz.questions.length) * 100;
+    const progress =
+        questions.length > 0
+            ? (answeredCount / questions.length) * 100
+            : 0;
 
-    const result = useMemo(() => {
-        const correct = quiz.questions.filter(
-            (question) => answers[question.id] === question.answer
-        ).length;
+    const difficultyLabel = (difficulty) => {
+        if (difficulty <= 2) return "Easy";
+        if (difficulty === 3) return "Medium";
+        return "Hard";
+    };
 
-        return {
-            correct,
-            incorrect: answeredCount - correct,
-            unanswered: quiz.questions.length - answeredCount,
-            score: Math.round((correct / quiz.questions.length) * 100),
-        };
-    }, [answers, answeredCount, quiz.questions]);
+    // --------------------------------------------------
+    // SAVE ANSWER TO BACKEND
+    // --------------------------------------------------
 
-    function selectAnswer(optionIndex) {
+    function selectAnswer(option) {
+        if (!currentQuestion || submitting) return;
+
+        const questionId = currentQuestion.id;
+
+        // Update the UI immediately.
         setAnswers((previous) => ({
             ...previous,
-            [currentQuestion.id]: optionIndex,
+            [questionId]: option,
         }));
+
+        setSaveError("");
+        setPendingSaves((previous) => previous + 1);
+
+        // Queue requests for the same question so rapid changes
+        // cannot cause an older answer to overwrite a newer one.
+        const previousRequest =
+            saveQueues.current.get(questionId) || Promise.resolve();
+
+        const request = previousRequest
+            .catch(() => {})
+            .then(() =>
+                api.put(
+                    `/quizzes/${quizId}/answers/${questionId}`,
+                    { answer: option }
+                )
+            );
+
+        saveQueues.current.set(questionId, request);
+
+        request
+            .catch((err) => {
+                setSaveError(
+                    err.response?.data?.error?.message ||
+                        "Your answer could not be saved. Please try again."
+                );
+            })
+            .finally(() => {
+                if (saveQueues.current.get(questionId) === request) {
+                    saveQueues.current.delete(questionId);
+                }
+
+                setPendingSaves((previous) =>
+                    Math.max(0, previous - 1)
+                );
+            });
     }
 
+    // --------------------------------------------------
+    // QUESTION NAVIGATION
+    // --------------------------------------------------
+
     function toggleMark() {
+        if (!currentQuestion || submitting) return;
+
         setMarked((previous) =>
             previous.includes(currentQuestion.id)
-                ? previous.filter((id) => id !== currentQuestion.id)
+                ? previous.filter(
+                      (id) => id !== currentQuestion.id
+                  )
                 : [...previous, currentQuestion.id]
         );
     }
 
-    function submitQuiz() {
-  const correct = quiz.questions.filter(
-    (question) => answers[question.id] === question.answer
-  ).length;
-
-  const score = Math.round(
-    (correct / quiz.questions.length) * 100
-  );
-
-  const result = {
-    quiz,
-    questions: quiz.questions,
-    answers,
-  };
-
-  const history = JSON.parse(
-    localStorage.getItem("masterpath-quiz-history") || "[]"
-  );
-
-  history.unshift({
-    id: `${quizId}-${Date.now()}`,
-    quizId,
-    title: quiz.title,
-    course: quiz.course,
-    topic: quiz.topic,
-    score,
-    correct,
-    total: quiz.questions.length,
-    completedAt: new Date().toISOString(),
-  });
-
-  localStorage.setItem(
-    "masterpath-quiz-history",
-    JSON.stringify(history)
-  );
-
-  localStorage.removeItem(storageKey);
-
-  setSubmitted(true);
-
-  navigate(`/quizzes/${quizId}/results`, {
-    state: { result },
-  });
-}
-
     function goToQuestion(index) {
-        if (index >= 0 && index < quiz.questions.length) {
+        if (
+            index >= 0 &&
+            index < questions.length &&
+            !submitting
+        ) {
             setCurrentIndex(index);
         }
     }
 
+    // --------------------------------------------------
+    // SUBMIT QUIZ
+    // --------------------------------------------------
+
+    async function submitQuiz() {
+        if (submitting) return;
+
+        try {
+            setSubmitting(true);
+            setSaveError("");
+
+            // Wait for any answer requests still in progress.
+            await Promise.all([...saveQueues.current.values()]);
+
+            // Finalize the quiz on the backend.
+            await api.post(`/quizzes/${quizId}/finish`);
+
+            // Results page fetches the persisted result itself.
+            navigate(`/quizzes/${quizId}/results`, {
+                replace: true,
+            });
+        } catch (err) {
+            setSubmitting(false);
+            setShowSubmitModal(false);
+
+            setSaveError(
+                err.response?.data?.error?.message ||
+                    "Unable to submit the quiz. Please try again."
+            );
+        }
+    }
+
+    // --------------------------------------------------
+    // LOADING / ERROR STATES
+    // --------------------------------------------------
+
+    if (loading) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-app">
+                <div className="text-center">
+                    <div className="mx-auto h-9 w-9 animate-spin rounded-full border-4 border-brand/20 border-t-brand" />
+                    <p className="mt-4 text-sm text-muted">
+                        Loading your quiz...
+                    </p>
+                </div>
+            </div>
+        );
+    }
+
+    if (error || !quiz || !currentQuestion) {
+        return (
+            <div className="flex min-h-screen items-center justify-center bg-app px-4">
+                <div className="max-w-md rounded-panel border border-border bg-surface p-7 text-center">
+                    <FiAlertCircle
+                        className="mx-auto text-error"
+                        size={32}
+                    />
+                    <h2 className="mt-4 font-heading text-xl font-bold text-foreground">
+                        Unable to load quiz
+                    </h2>
+                    <p className="mt-2 text-sm text-muted">
+                        {error || "Quiz data is unavailable."}
+                    </p>
+                    <button
+                        onClick={() => navigate("/quizzes")}
+                        className="mt-6 rounded-xl bg-brand px-5 py-3 text-sm font-semibold text-white hover:bg-brand-hover"
+                    >
+                        Back to quizzes
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // --------------------------------------------------
+    // MAIN UI
+    // --------------------------------------------------
 
     return (
         <div className="min-h-screen bg-app px-4 py-6 sm:px-6 lg:px-8">
@@ -356,44 +358,64 @@ export default function QuizAttempt() {
                     <div>
                         <button
                             onClick={() => navigate("/quizzes")}
-                            className="mb-3 inline-flex items-center gap-2 text-sm text-muted hover:text-brand"
+                            disabled={submitting}
+                            className="mb-3 inline-flex items-center gap-2 text-sm text-muted hover:text-brand disabled:opacity-50"
                         >
                             <FiChevronLeft />
                             Back to quizzes
                         </button>
 
                         <h1 className="font-heading text-2xl font-bold text-foreground">
-                            {quiz.title}
+                            {quiz.topic_id
+                                ? "Topic Practice Quiz"
+                                : "Course Practice Quiz"}
                         </h1>
 
                         <div className="mt-2 flex flex-wrap items-center gap-3 text-xs text-muted">
-                            <span>{quiz.course}</span>
+                            <span>{courseName}</span>
                             <span>·</span>
-                            <span>{quiz.topic}</span>
+                            <span>{topicName}</span>
                             <span>·</span>
-                            <span>{quiz.difficulty}</span>
+                            <span>
+                                {difficultyLabel(
+                                    currentQuestion.difficulty
+                                )}
+                            </span>
                         </div>
                     </div>
 
-                    <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
-                        <FiClock className="text-brand" size={19} />
-                        <div>
-                            <p className="text-xs text-muted">Estimated duration</p>
-                            <p className="font-semibold text-foreground">
-                                {quiz.duration} minutes
-                            </p>
+                    <div className="flex flex-wrap items-center gap-3">
+                        <div className="flex items-center gap-3 rounded-xl border border-border bg-surface px-4 py-3">
+                            <FiClock className="text-brand" size={19} />
+                            <div>
+                                <p className="text-xs text-muted">
+                                    Estimated duration
+                                </p>
+                                <p className="font-semibold text-foreground">
+                                    {Math.round(
+                                        (questions.length * 2.5) * 10
+                                    ) / 10}{" "}
+                                    minutes
+                                </p>
+                            </div>
                         </div>
-                    </div>
-                    <div className={`flex items-center gap-3 rounded-xl border p-3 ${timeLeft <= 60
-                            ? "border-error/30 bg-error/5 text-error"
-                            : "border-border bg-surface text-foreground"
-                        }`}>
-                        <FiClock size={19} />
-                        <div>
-                            <p className="text-xs text-muted">Time remaining</p>
-                            <p className="font-heading text-lg font-bold tabular-nums">
-                                {formattedTime}
-                            </p>
+
+                        <div
+                            className={`flex items-center gap-3 rounded-xl border p-3 ${
+                                timeLeft <= 60
+                                    ? "border-error/30 bg-error/5 text-error"
+                                    : "border-border bg-surface text-foreground"
+                            }`}
+                        >
+                            <FiClock size={19} />
+                            <div>
+                                <p className="text-xs text-muted">
+                                    Time remaining
+                                </p>
+                                <p className="font-heading text-lg font-bold tabular-nums">
+                                    {formattedTime}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </header>
@@ -406,7 +428,7 @@ export default function QuizAttempt() {
                                 Your progress
                             </p>
                             <p className="mt-1 text-xs text-muted">
-                                {answeredCount} of {quiz.questions.length} questions answered
+                                {answeredCount} of {questions.length} questions answered
                             </p>
                         </div>
 
@@ -423,6 +445,14 @@ export default function QuizAttempt() {
                     </div>
                 </div>
 
+                {/* Save error */}
+                {saveError && (
+                    <div className="mt-4 flex items-start gap-2 rounded-xl border border-error/30 bg-error/5 p-3 text-sm text-error">
+                        <FiAlertCircle className="mt-0.5 shrink-0" />
+                        <p>{saveError}</p>
+                    </div>
+                )}
+
                 {/* Main quiz layout */}
                 <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-[1fr_280px]">
 
@@ -430,15 +460,17 @@ export default function QuizAttempt() {
                     <main className="rounded-panel border border-border bg-surface p-5 sm:p-8">
                         <div className="flex flex-wrap items-center justify-between gap-3">
                             <span className="rounded-lg bg-brand-soft px-3 py-1.5 text-xs font-semibold text-brand">
-                                Question {currentIndex + 1} of {quiz.questions.length}
+                                Question {currentIndex + 1} of {questions.length}
                             </span>
 
                             <button
                                 onClick={toggleMark}
-                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition ${marked.includes(currentQuestion.id)
-                                    ? "border-warning/40 bg-warning/10 text-warning"
-                                    : "border-border text-muted hover:border-warning/40 hover:text-warning"
-                                    }`}
+                                disabled={submitting}
+                                className={`inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-xs font-semibold transition disabled:opacity-50 ${
+                                    marked.includes(currentQuestion.id)
+                                        ? "border-warning/40 bg-warning/10 text-warning"
+                                        : "border-border text-muted hover:border-warning/40 hover:text-warning"
+                                }`}
                             >
                                 <FiFlag size={15} />
                                 {marked.includes(currentQuestion.id)
@@ -448,7 +480,7 @@ export default function QuizAttempt() {
                         </div>
 
                         <h2 className="mt-7 font-heading text-xl font-bold leading-8 text-foreground sm:text-2xl">
-                            {currentQuestion.question}
+                            {currentQuestion.prompt}
                         </h2>
 
                         <p className="mt-3 text-sm text-muted">
@@ -458,33 +490,44 @@ export default function QuizAttempt() {
                         <div className="mt-7 space-y-3">
                             {currentQuestion.options.map((option, index) => {
                                 const selected =
-                                    answers[currentQuestion.id] === index;
+                                    answers[currentQuestion.id] === option;
 
                                 return (
                                     <button
                                         key={index}
-                                        onClick={() => selectAnswer(index)}
-                                        className={`flex w-full items-center gap-4 rounded-xl border p-4 text-left transition ${selected
-                                            ? "border-brand bg-brand-wash"
-                                            : "border-border hover:border-brand/40 hover:bg-app"
-                                            }`}
+                                        onClick={() => selectAnswer(option)}
+                                        disabled={submitting}
+                                        className={`flex w-full items-center gap-4 rounded-xl border p-4 text-left transition disabled:cursor-not-allowed disabled:opacity-70 ${
+                                            selected
+                                                ? "border-brand bg-brand-wash"
+                                                : "border-border hover:border-brand/40 hover:bg-app"
+                                        }`}
                                     >
-                                        <span className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${selected
-                                            ? "bg-brand text-white"
-                                            : "bg-app text-muted"
-                                            }`}>
+                                        <span
+                                            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                                                selected
+                                                    ? "bg-brand text-white"
+                                                    : "bg-app text-muted"
+                                            }`}
+                                        >
                                             {String.fromCharCode(65 + index)}
                                         </span>
 
-                                        <span className={`flex-1 text-sm ${selected
-                                            ? "font-semibold text-foreground"
-                                            : "text-foreground"
-                                            }`}>
+                                        <span
+                                            className={`flex-1 text-sm ${
+                                                selected
+                                                    ? "font-semibold text-foreground"
+                                                    : "text-foreground"
+                                            }`}
+                                        >
                                             {option}
                                         </span>
 
                                         {selected && (
-                                            <FiCheckCircle className="shrink-0 text-brand" size={19} />
+                                            <FiCheckCircle
+                                                className="shrink-0 text-brand"
+                                                size={19}
+                                            />
                                         )}
                                     </button>
                                 );
@@ -494,26 +537,36 @@ export default function QuizAttempt() {
                         {/* Navigation */}
                         <div className="mt-8 flex flex-col-reverse justify-between gap-3 border-t border-border pt-5 sm:flex-row">
                             <button
-                                onClick={() => goToQuestion(currentIndex - 1)}
-                                disabled={currentIndex === 0}
+                                onClick={() =>
+                                    goToQuestion(currentIndex - 1)
+                                }
+                                disabled={
+                                    currentIndex === 0 || submitting
+                                }
                                 className="inline-flex items-center justify-center gap-2 rounded-xl border border-border px-5 py-3 text-sm font-semibold text-muted transition hover:bg-app disabled:cursor-not-allowed disabled:opacity-40"
                             >
                                 <FiChevronLeft />
                                 Previous
                             </button>
 
-                            {currentIndex < quiz.questions.length - 1 ? (
+                            {currentIndex < questions.length - 1 ? (
                                 <button
-                                    onClick={() => goToQuestion(currentIndex + 1)}
-                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-hover"
+                                    onClick={() =>
+                                        goToQuestion(currentIndex + 1)
+                                    }
+                                    disabled={submitting}
+                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50"
                                 >
                                     Next question
                                     <FiChevronRight />
                                 </button>
                             ) : (
                                 <button
-                                    onClick={() => setShowSubmitModal(true)}
-                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-hover"
+                                    onClick={() =>
+                                        setShowSubmitModal(true)
+                                    }
+                                    disabled={submitting}
+                                    className="inline-flex items-center justify-center gap-2 rounded-xl bg-brand px-6 py-3 text-sm font-semibold text-white transition hover:bg-brand-hover disabled:opacity-50"
                                 >
                                     Submit quiz
                                     <FiCheckCircle />
@@ -532,22 +585,27 @@ export default function QuizAttempt() {
                         </p>
 
                         <div className="mt-5 grid grid-cols-5 gap-2">
-                            {quiz.questions.map((question, index) => {
-                                const isAnswered = answers[question.id] !== undefined;
+                            {questions.map((question, index) => {
+                                const isAnswered =
+                                    answers[question.id] !== undefined;
                                 const isMarked = marked.includes(question.id);
                                 const isCurrent = currentIndex === index;
 
                                 return (
                                     <button
                                         key={question.id}
-                                        onClick={() => goToQuestion(index)}
+                                        onClick={() =>
+                                            goToQuestion(index)
+                                        }
+                                        disabled={submitting}
                                         aria-label={`Go to question ${index + 1}`}
-                                        className={`relative flex h-10 items-center justify-center rounded-lg border text-sm font-semibold transition ${isCurrent
-                                            ? "border-brand bg-brand text-white"
-                                            : isAnswered
-                                                ? "border-success/30 bg-success/10 text-success"
-                                                : "border-border bg-surface text-muted hover:border-brand"
-                                            }`}
+                                        className={`relative flex h-10 items-center justify-center rounded-lg border text-sm font-semibold transition disabled:opacity-50 ${
+                                            isCurrent
+                                                ? "border-brand bg-brand text-white"
+                                                : isAnswered
+                                                  ? "border-success/30 bg-success/10 text-success"
+                                                  : "border-border bg-surface text-muted hover:border-brand"
+                                        }`}
                                     >
                                         {index + 1}
                                         {isMarked && (
@@ -581,7 +639,8 @@ export default function QuizAttempt() {
 
                         <button
                             onClick={() => setShowSubmitModal(true)}
-                            className="mt-5 w-full rounded-xl border border-brand/30 py-3 text-sm font-semibold text-brand transition hover:bg-brand-wash"
+                            disabled={submitting}
+                            className="mt-5 w-full rounded-xl border border-brand/30 py-3 text-sm font-semibold text-brand transition hover:bg-brand-wash disabled:opacity-50"
                         >
                             Submit quiz
                         </button>
@@ -593,7 +652,9 @@ export default function QuizAttempt() {
             {showSubmitModal && (
                 <div
                     className="fixed inset-0 z-[100] flex items-center justify-center bg-foreground/40 p-4 backdrop-blur-sm"
-                    onClick={() => setShowSubmitModal(false)}
+                    onClick={() => {
+                        if (!submitting) setShowSubmitModal(false);
+                    }}
                 >
                     <div
                         role="dialog"
@@ -606,29 +667,45 @@ export default function QuizAttempt() {
                             <FiAlertCircle size={23} />
                         </div>
 
-                        <h2 id="submit-title" className="mt-4 font-heading text-xl font-bold text-foreground">
+                        <h2
+                            id="submit-title"
+                            className="mt-4 font-heading text-xl font-bold text-foreground"
+                        >
                             Submit your quiz?
                         </h2>
 
                         <p className="mt-2 text-sm leading-6 text-muted">
-                            You have answered {answeredCount} out of {quiz.questions.length} questions.
+                            You have answered {answeredCount} out of{" "}
+                            {questions.length} questions.
                             {unansweredCount > 0 &&
                                 ` ${unansweredCount} questions are still unanswered.`}
                         </p>
 
+                        {pendingSaves > 0 && (
+                            <p className="mt-3 text-xs text-muted">
+                                Saving your answers...
+                            </p>
+                        )}
+
                         <div className="mt-5 flex gap-3">
                             <button
-                                onClick={() => setShowSubmitModal(false)}
-                                className="flex-1 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-muted hover:bg-app"
+                                onClick={() =>
+                                    setShowSubmitModal(false)
+                                }
+                                disabled={submitting}
+                                className="flex-1 rounded-xl border border-border px-4 py-3 text-sm font-semibold text-muted hover:bg-app disabled:opacity-50"
                             >
                                 Continue quiz
                             </button>
 
                             <button
                                 onClick={submitQuiz}
-                                className="flex-1 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-hover"
+                                disabled={submitting || pendingSaves > 0}
+                                className="flex-1 rounded-xl bg-brand px-4 py-3 text-sm font-semibold text-white hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50"
                             >
-                                Submit now
+                                {submitting
+                                    ? "Submitting..."
+                                    : "Submit now"}
                             </button>
                         </div>
                     </div>

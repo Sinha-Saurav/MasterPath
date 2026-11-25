@@ -22,7 +22,15 @@ export async function getMe(req, res, next) {
       throw error;
     }
 
-    return res.json(data);
+    const { data: authData, error: authError } =
+      await supabase.auth.admin.getUserById(req.user.id);
+
+    if (authError) throw authError;
+
+    return res.json({
+      ...data,
+      email: authData.user.email,
+    });
   } catch (error) {
     next(error);
   }

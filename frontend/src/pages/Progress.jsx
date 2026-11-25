@@ -1,5 +1,5 @@
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   FiActivity,
   FiAward,
@@ -10,8 +10,8 @@ import {
   FiClock,
   FiTarget,
   FiTrendingUp,
-  FiZap,
   FiAlertCircle,
+  FiRefreshCw,
 } from "react-icons/fi";
 
 import {
@@ -20,29 +20,56 @@ import {
   XAxis,
   YAxis,
   Tooltip,
-  BarChart,
-  Bar,
   LineChart,
   Line,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
-import {
-  mockProgressStats,
-  weeklyActivity,
-  monthlyActivity,
-  weeklyQuizPerformance,
-  monthlyQuizPerformance,
-  mockCourseMastery,
-  mockLearningHistory,
-  mockLearningInsights,
-} from "../data/mockProgress";
+import { useQuery } from "@tanstack/react-query";
+import api from "../services/api";
 
-const iconMap = {
-  quiz: FiCheckCircle,
-  clock: FiClock,
-  target: FiTarget,
-  activity: FiActivity,
+const COLORS = {
+  brand: "var(--color-brand)",
+  success: "var(--color-success)",
+  error: "var(--color-error)",
+  muted: "var(--color-muted)",
+  border: "var(--color-border)",
+  surface: "var(--color-surface)",
 };
+
+function formatDate(dateString) {
+  if (!dateString) return "Date unavailable";
+
+  return new Date(dateString).toLocaleDateString("en-IN", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function formatPercentage(value) {
+  if (value === null || value === undefined) return "—";
+  return `${Number(value).toFixed(1)}%`;
+}
+
+function getMasteryPercentage(score) {
+  if (score === null || score === undefined) return null;
+  return Math.min(100, Math.max(0, Number(score) * 100));
+}
+
+function getMasteryColor(value) {
+  if (value >= 75) return "bg-success";
+  if (value >= 40) return "bg-warning";
+  return "bg-error";
+}
+
+function getMasteryTextColor(value) {
+  if (value >= 75) return "text-success";
+  if (value >= 40) return "text-warning";
+  return "text-error";
+}
 
 function SectionHeading({ title, description, action }) {
   return (
@@ -62,16 +89,14 @@ function SectionHeading({ title, description, action }) {
   );
 }
 
-function StatCard({ item }) {
-  const Icon = iconMap[item.icon];
-
+function StatCard({ label, value, detail, icon: Icon }) {
   return (
     <div className="rounded-card border border-border bg-surface p-4 sm:p-5">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-xs font-medium text-muted">{item.label}</p>
+          <p className="text-xs font-medium text-muted">{label}</p>
           <p className="mt-2 font-heading text-2xl font-bold text-foreground">
-            {item.value}
+            {value}
           </p>
         </div>
 
@@ -80,115 +105,255 @@ function StatCard({ item }) {
         </div>
       </div>
 
-      <p className="mt-3 text-xs text-muted">{item.detail}</p>
+      <p className="mt-3 text-xs text-muted">{detail}</p>
     </div>
   );
 }
 
-function ChartCard({
-  title,
-  description,
-  data,
-  dataKey,
-  color,
-  type = "bar",
-  filter,
-  onFilterChange,
-  suffix = "",
-}) {
-  const Chart = type === "line" ? LineChart : BarChart;
-
+function ChartCard({ title, description, children }) {
   return (
     <section className="min-w-0 rounded-card border border-border bg-surface p-4 sm:p-5">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-bold text-foreground">{title}</h3>
-          <p className="mt-1 text-xs text-muted">{description}</p>
-        </div>
-
-        <select
-          value={filter}
-          onChange={(e) => onFilterChange(e.target.value)}
-          className="h-9 rounded-lg border border-border bg-surface px-3 text-xs font-medium text-foreground outline-none focus:border-brand"
-        >
-          <option value="week">This week</option>
-          <option value="month">This month</option>
-        </select>
+      <div>
+        <h3 className="text-sm font-bold text-foreground">{title}</h3>
+        <p className="mt-1 text-xs text-muted">{description}</p>
       </div>
-
-      <div className="mt-6 h-[230px] w-full">
-        <ResponsiveContainer width="100%" height="100%">
-          <Chart data={data}>
-            <CartesianGrid
-              stroke="var(--color-border)"
-              strokeDasharray="3 3"
-              vertical={false}
-            />
-            <XAxis
-              dataKey="label"
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "var(--color-muted)", fontSize: 11 }}
-              dy={8}
-            />
-            <YAxis
-              axisLine={false}
-              tickLine={false}
-              tick={{ fill: "var(--color-muted)", fontSize: 11 }}
-              width={35}
-              tickFormatter={(value) => `${value}${suffix}`}
-            />
-            <Tooltip
-              cursor={{ fill: "var(--color-brand-wash)" }}
-              contentStyle={{
-                background: "var(--color-surface)",
-                border: "1px solid var(--color-border)",
-                borderRadius: "12px",
-                fontSize: "12px",
-              }}
-              formatter={(value) => [
-                `${value}${suffix}`,
-                type === "line" ? "Score" : "Study hours",
-              ]}
-            />
-
-            {type === "line" ? (
-              <Line
-                type="monotone"
-                dataKey={dataKey}
-                stroke={color}
-                strokeWidth={3}
-                dot={{
-                  r: 4,
-                  fill: color,
-                  strokeWidth: 2,
-                  stroke: "var(--color-surface)",
-                }}
-                activeDot={{ r: 6 }}
-              />
-            ) : (
-              <Bar
-                dataKey={dataKey}
-                fill={color}
-                radius={[6, 6, 0, 0]}
-                maxBarSize={38}
-              />
-            )}
-          </Chart>
-        </ResponsiveContainer>
-      </div>
+      {children}
     </section>
   );
 }
 
-function CourseMastery() {
-  const [expandedCourse, setExpandedCourse] = useState("dsa");
+function QuizPerformanceChart({ quizzes }) {
+  const chartData = useMemo(() => {
+    return [...quizzes]
+      .reverse()
+      .map((quiz, index) => ({
+        label: `Quiz ${index + 1}`,
+        date: formatDate(quiz.finished_at),
+        score: Number(quiz.percentage ?? 0),
+      }));
+  }, [quizzes]);
+
+  if (!chartData.length) {
+    return (
+      <div className="flex h-[250px] items-center justify-center text-sm text-muted">
+        Complete a quiz to see your performance trend.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-5 h-[250px] w-full">
+      <ResponsiveContainer width="100%" height="100%">
+        <LineChart
+          data={chartData}
+          margin={{ top: 10, right: 12, left: -15, bottom: 5 }}
+        >
+          <defs>
+            <linearGradient id="progressLineGradient" x1="0" y1="0" x2="1" y2="0">
+              <stop offset="0%" stopColor={COLORS.brand} />
+              <stop offset="100%" stopColor={COLORS.success} />
+            </linearGradient>
+          </defs>
+
+          <CartesianGrid
+            stroke={COLORS.border}
+            strokeDasharray="3 3"
+            vertical={false}
+          />
+
+          <XAxis
+            dataKey="label"
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: COLORS.muted, fontSize: 11 }}
+            dy={8}
+          />
+
+          <YAxis
+            domain={[0, 100]}
+            axisLine={false}
+            tickLine={false}
+            tick={{ fill: COLORS.muted, fontSize: 11 }}
+            tickFormatter={(value) => `${value}%`}
+            width={42}
+          />
+
+          <Tooltip
+            contentStyle={{
+              background: COLORS.surface,
+              border: `1px solid ${COLORS.border}`,
+              borderRadius: "12px",
+              fontSize: "12px",
+            }}
+            labelStyle={{ color: COLORS.muted }}
+            formatter={(value) => [`${Number(value).toFixed(1)}%`, "Score"]}
+            labelFormatter={(label, payload) =>
+              payload?.[0]?.payload?.date
+                ? `${label} · ${payload[0].payload.date}`
+                : label
+            }
+          />
+
+          <Line
+            type="monotone"
+            dataKey="score"
+            stroke="url(#progressLineGradient)"
+            strokeWidth={3}
+            dot={{
+              r: 4,
+              fill: COLORS.brand,
+              strokeWidth: 2,
+              stroke: COLORS.surface,
+            }}
+            activeDot={{
+              r: 7,
+              fill: COLORS.brand,
+              stroke: COLORS.surface,
+              strokeWidth: 3,
+            }}
+            animationDuration={900}
+          />
+        </LineChart>
+      </ResponsiveContainer>
+    </div>
+  );
+}
+
+function AnswerDistributionChart({ quizzes }) {
+  const distribution = useMemo(() => {
+    const totals = quizzes.reduce(
+      (acc, quiz) => {
+        acc.correct += Number(quiz.correct_answers ?? 0);
+        acc.total += Number(quiz.total_questions ?? 0);
+        return acc;
+      },
+      { correct: 0, total: 0 }
+    );
+
+    const incorrect = Math.max(0, totals.total - totals.correct);
+
+    return {
+      data: [
+        { name: "Correct", value: totals.correct, color: COLORS.success },
+        { name: "Incorrect", value: incorrect, color: COLORS.error },
+      ],
+      ...totals,
+      incorrect,
+    };
+  }, [quizzes]);
+
+  if (distribution.total === 0) {
+    return (
+      <div className="flex h-[250px] items-center justify-center text-sm text-muted">
+        Answer some quiz questions to see this chart.
+      </div>
+    );
+  }
+
+  return (
+    <div className="mt-3">
+      <div className="relative h-[205px] w-full">
+        <ResponsiveContainer width="100%" height="100%">
+          <PieChart>
+            <Pie
+              data={distribution.data}
+              dataKey="value"
+              nameKey="name"
+              cx="50%"
+              cy="50%"
+              innerRadius={65}
+              outerRadius={88}
+              paddingAngle={4}
+              stroke="none"
+              animationDuration={900}
+            >
+              {distribution.data.map((entry) => (
+                <Cell key={entry.name} fill={entry.color} />
+              ))}
+            </Pie>
+
+            <Tooltip
+              contentStyle={{
+                background: COLORS.surface,
+                border: `1px solid ${COLORS.border}`,
+                borderRadius: "12px",
+                fontSize: "12px",
+              }}
+              formatter={(value, name) => [value, name]}
+            />
+          </PieChart>
+        </ResponsiveContainer>
+
+        <div className="pointer-events-none absolute inset-0 flex flex-col items-center justify-center">
+          <p className="font-heading text-2xl font-bold text-foreground">
+            {distribution.total}
+          </p>
+          <p className="text-xs text-muted">Questions</p>
+        </div>
+      </div>
+
+      <div className="mt-2 flex justify-center gap-6">
+        {distribution.data.map((item) => (
+          <div key={item.name} className="flex items-center gap-2">
+            <span
+              className="h-2.5 w-2.5 rounded-full"
+              style={{ backgroundColor: item.color }}
+            />
+            <div>
+              <p className="text-xs text-muted">{item.name}</p>
+              <p className="text-sm font-bold text-foreground">
+                {item.value}
+              </p>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <p className="mt-4 text-center text-[11px] text-muted">
+        Based on your latest {quizzes.length} completed quizzes.
+      </p>
+    </div>
+  );
+}
+
+function CourseMastery({ courses }) {
+  const [expandedCourse, setExpandedCourse] = useState(null);
+
+  const {
+    data: masteryData,
+    isPending,
+    isError,
+    refetch,
+  } = useQuery({
+    queryKey: ["courseTopicMastery", expandedCourse],
+    queryFn: async () => {
+      const response = await api.get(
+        `/me/courses/${expandedCourse}/mastery`
+      );
+      return response.data;
+    },
+    enabled: expandedCourse !== null,
+  });
 
   const toggleCourse = (courseId) => {
     setExpandedCourse((current) =>
       current === courseId ? null : courseId
     );
   };
+
+  if (!courses.length) {
+    return (
+      <section>
+        <SectionHeading
+          title="Course-wise mastery"
+          description="Your topic mastery across enrolled courses."
+        />
+        <div className="rounded-card border border-border bg-surface p-6 text-center text-sm text-muted">
+          Enroll in a course to start tracking mastery.
+        </div>
+      </section>
+    );
+  }
 
   return (
     <section>
@@ -198,44 +363,50 @@ function CourseMastery() {
       />
 
       <div className="space-y-3">
-        {mockCourseMastery.map((course) => {
-          const isExpanded = expandedCourse === course.id;
+        {courses.map((course) => {
+          const isExpanded = expandedCourse === course.course_id;
+          const mastery = getMasteryPercentage(course.mastery_score);
 
           return (
             <div
-              key={course.id}
+              key={course.course_id}
               className="overflow-hidden rounded-card border border-border bg-surface"
             >
               <button
                 type="button"
-                onClick={() => toggleCourse(course.id)}
+                onClick={() => toggleCourse(course.course_id)}
                 aria-expanded={isExpanded}
                 className="flex w-full items-center gap-3 p-4 text-left transition hover:bg-brand-wash/40 sm:p-5"
               >
                 <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-xs font-bold text-brand-hover">
-                  {course.shortName}
+                  {course.course_code}
                 </div>
 
                 <div className="min-w-0 flex-1">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h3 className="text-sm font-bold text-foreground">
-                      {course.name}
+                      {course.course_name}
                     </h3>
+
                     <span className="text-sm font-bold text-brand-hover">
-                      {course.mastery}%
+                      {mastery === null
+                        ? "Not assessed"
+                        : formatPercentage(mastery)}
                     </span>
                   </div>
 
                   <p className="mt-1 text-xs text-muted">
-                    {course.masteredTopics} of {course.totalTopics} topics mastered
+                    {course.topics_assessed} of {course.total_topics} topics assessed
                   </p>
 
-                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-wash">
-                    <div
-                      className={`h-full rounded-full ${course.color}`}
-                      style={{ width: `${course.mastery}%` }}
-                    />
-                  </div>
+                  {mastery !== null && (
+                    <div className="mt-3 h-2 overflow-hidden rounded-full bg-brand-wash">
+                      <div
+                        className="h-full rounded-full bg-brand"
+                        style={{ width: `${mastery}%` }}
+                      />
+                    </div>
+                  )}
                 </div>
 
                 {isExpanded ? (
@@ -247,50 +418,85 @@ function CourseMastery() {
 
               {isExpanded && (
                 <div className="border-t border-border bg-app/50 p-4 sm:p-5">
-                  <div className="mb-4 flex items-center justify-between">
-                    <p className="text-xs font-bold text-foreground">
-                      Topic mastery
-                    </p>
-                    <span className="text-[11px] text-muted">
-                      {course.topics.length} topics shown
-                    </span>
-                  </div>
-
-                  <div className="space-y-4">
-                    {course.topics.map((topic) => (
-                      <div key={topic.name}>
-                        <div className="mb-2 flex items-center justify-between gap-3">
-                          <span className="text-xs font-medium text-foreground">
-                            {topic.name}
-                          </span>
-                          <span
-                            className={`text-xs font-semibold ${
-                              topic.mastery >= 75
-                                ? "text-success"
-                                : topic.mastery >= 50
-                                  ? "text-warning"
-                                  : "text-error"
-                            }`}
-                          >
-                            {topic.mastery}%
-                          </span>
-                        </div>
-
-                        <div className="h-1.5 overflow-hidden rounded-full bg-brand-wash">
-                          <div
-                            className={`h-full rounded-full ${
-                              topic.mastery >= 75
-                                ? "bg-success"
-                                : topic.mastery >= 50
-                                  ? "bg-warning"
-                                  : "bg-error"
-                            }`}
-                            style={{ width: `${topic.mastery}%` }}
-                          />
-                        </div>
+                  {isPending ? (
+                    <div className="py-6 text-center text-sm text-muted">
+                      Loading topic mastery...
+                    </div>
+                  ) : isError ? (
+                    <div className="py-5 text-center">
+                      <p className="text-sm text-error">
+                        Could not load topic mastery.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={() => refetch()}
+                        className="mt-2 text-xs font-semibold text-brand-hover"
+                      >
+                        Try again
+                      </button>
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-4 flex items-center justify-between">
+                        <p className="text-xs font-bold text-foreground">
+                          Topic mastery
+                        </p>
+                        <span className="text-[11px] text-muted">
+                          {masteryData?.topics?.length ?? 0} topics
+                        </span>
                       </div>
-                    ))}
-                  </div>
+
+                      <div className="space-y-4">
+                        {(masteryData?.topics ?? []).map((topic) => {
+                          const topicScore = getMasteryPercentage(
+                            topic.mastery_score
+                          );
+
+                          return (
+                            <div key={topic.topic_id}>
+                              <div className="mb-2 flex items-center justify-between gap-3">
+                                <div className="min-w-0">
+                                  <p className="truncate text-xs font-medium text-foreground">
+                                    {topic.topic_name}
+                                  </p>
+                                  {topic.unit && (
+                                    <p className="mt-0.5 text-[11px] text-muted">
+                                      {topic.unit}
+                                    </p>
+                                  )}
+                                </div>
+
+                                <span
+                                  className={`shrink-0 text-xs font-semibold ${
+                                    topicScore === null
+                                      ? "text-muted"
+                                      : getMasteryTextColor(topicScore)
+                                  }`}
+                                >
+                                  {topicScore === null
+                                    ? "Not assessed"
+                                    : formatPercentage(topicScore)}
+                                </span>
+                              </div>
+
+                              {topicScore !== null && (
+                                <div className="h-1.5 overflow-hidden rounded-full bg-brand-wash">
+                                  <div
+                                    className={`h-full rounded-full ${getMasteryColor(topicScore)}`}
+                                    style={{ width: `${topicScore}%` }}
+                                  />
+                                </div>
+                              )}
+
+                              <p className="mt-1 text-[10px] text-muted">
+                                {topic.attempts_count} attempts · {topic.correct_count} correct
+                              </p>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </>
+                  )}
                 </div>
               )}
             </div>
@@ -301,54 +507,75 @@ function CourseMastery() {
   );
 }
 
-function LearningInsights() {
+function LearningHistory({ quizzes, courses }) {
+  const courseNames = useMemo(
+    () =>
+      new Map(
+        courses.map((course) => [
+          course.course_id,
+          course.course_name,
+        ])
+      ),
+    [courses]
+  );
+
+  if (!quizzes.length) {
+    return (
+      <section>
+        <SectionHeading
+          title="Learning history"
+          description="Your recently completed quizzes."
+        />
+        <div className="rounded-card border border-border bg-surface p-6 text-center text-sm text-muted">
+          Your completed quizzes will appear here.
+        </div>
+      </section>
+    );
+  }
+
   return (
     <section>
       <SectionHeading
-        title="Learning insights"
-        description="Identify what's going well and where to focus next."
+        title="Learning history"
+        description="Your latest completed quizzes."
       />
 
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        {mockLearningInsights.map((insight) => {
-          const isStrong = insight.type === "strong";
+      <div className="overflow-hidden rounded-card border border-border bg-surface">
+        {quizzes.map((quiz, index) => {
+          const score = Number(quiz.percentage ?? 0);
+          const isLast = index === quizzes.length - 1;
 
           return (
             <div
-              key={insight.title}
-              className="rounded-card border border-border bg-surface p-4"
+              key={quiz.quiz_id}
+              className={`flex items-center gap-3 p-4 ${
+                !isLast ? "border-b border-border" : ""
+              }`}
             >
-              <div className="flex items-center gap-2">
-                {isStrong ? (
-                  <FiAward className="text-success" size={18} />
-                ) : (
-                  <FiAlertCircle className="text-warning" size={18} />
-                )}
-                <p className="text-xs font-semibold text-muted">
-                  {insight.title}
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
+                <FiCheckCircle size={17} />
+              </div>
+
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm font-semibold text-foreground">
+                  {courseNames.get(quiz.course_id) ?? "Completed quiz"}
+                </p>
+                <p className="mt-1 truncate text-xs text-muted">
+                  {formatDate(quiz.finished_at)} · {quiz.correct_answers}/{quiz.total_questions} correct
                 </p>
               </div>
 
-              <h3 className="mt-3 font-heading text-base font-bold text-foreground">
-                {insight.topic}
-              </h3>
-              <p className="mt-1 text-xs text-muted">{insight.course}</p>
-
-              <div className="mt-4 flex items-center justify-between">
-                <span className="text-xs text-muted">Mastery level</span>
-                <span className="text-sm font-bold text-foreground">
-                  {insight.mastery}%
-                </span>
-              </div>
-
-              <div className="mt-2 h-2 overflow-hidden rounded-full bg-brand-wash">
-                <div
-                  className={`h-full rounded-full ${
-                    isStrong ? "bg-success" : "bg-warning"
-                  }`}
-                  style={{ width: `${insight.mastery}%` }}
-                />
-              </div>
+              <span
+                className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${
+                  score >= 75
+                    ? "bg-success/10 text-success"
+                    : score >= 40
+                      ? "bg-warning/10 text-warning"
+                      : "bg-error/10 text-error"
+                }`}
+              >
+                {formatPercentage(score)}
+              </span>
             </div>
           );
         })}
@@ -357,99 +584,103 @@ function LearningInsights() {
   );
 }
 
-function LearningHistory() {
-  const [showAll, setShowAll] = useState(false);
-
-  const visibleHistory = showAll
-    ? mockLearningHistory
-    : mockLearningHistory.slice(0, 4);
-
+function LoadingState() {
   return (
-    <section>
-      <SectionHeading
-        title="Learning history"
-        description="A record of your recent learning activities."
-        action={
-          <button
-            type="button"
-            onClick={() => setShowAll((prev) => !prev)}
-            className="text-xs font-semibold text-brand-hover hover:text-brand"
-          >
-            {showAll ? "Show less" : "View all"}
-          </button>
-        }
-      />
-
-      <div className="overflow-hidden rounded-card border border-border bg-surface">
-        {visibleHistory.map((item, index) => (
-          <div
-            key={item.id}
-            className={`flex items-center gap-3 p-4 ${
-              index !== visibleHistory.length - 1
-                ? "border-b border-border"
-                : ""
-            }`}
-          >
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-brand-soft text-brand-hover">
-              {item.type === "Quiz" ? (
-                <FiCheckCircle size={17} />
-              ) : (
-                <FiBookOpen size={17} />
-              )}
-            </div>
-
-            <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-semibold text-foreground">
-                {item.title}
-              </p>
-              <p className="mt-1 truncate text-xs text-muted">
-                {item.course} · {item.date}
-              </p>
-            </div>
-
-            <span
-              className={`shrink-0 rounded-lg px-2 py-1 text-[11px] font-semibold ${
-                item.result === "Mastered"
-                  ? "bg-success/10 text-success"
-                  : "bg-brand-soft text-brand-hover"
-              }`}
-            >
-              {item.result}
-            </span>
-          </div>
-        ))}
+    <div className="flex min-h-[300px] items-center justify-center">
+      <div className="flex items-center gap-2 text-sm text-muted">
+        <FiRefreshCw className="animate-spin" />
+        Loading your progress...
       </div>
-    </section>
+    </div>
+  );
+}
+
+function ErrorState({ onRetry }) {
+  return (
+    <div className="rounded-card border border-border bg-surface p-8 text-center">
+      <FiAlertCircle className="mx-auto text-error" size={28} />
+      <h2 className="mt-3 text-base font-bold text-foreground">
+        Couldn't load your progress
+      </h2>
+      <p className="mt-1 text-sm text-muted">
+        Something went wrong while fetching your learning data.
+      </p>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="mt-4 rounded-lg bg-brand px-4 py-2 text-xs font-semibold text-white transition hover:opacity-90"
+      >
+        Try again
+      </button>
+    </div>
   );
 }
 
 export default function Progress() {
-  const [activityFilter, setActivityFilter] = useState("week");
-  const [quizFilter, setQuizFilter] = useState("week");
+  const {
+    data: dashboard,
+    isPending: dashboardLoading,
+    isError: dashboardError,
+    refetch: refetchDashboard,
+  } = useQuery({
+    queryKey: ["dashboard"],
+    queryFn: async () => {
+      const response = await api.get("/me/dashboard");
+      return response.data;
+    },
+  });
 
-  const activityData =
-    activityFilter === "week" ? weeklyActivity : monthlyActivity;
+  const summary = dashboard?.summary;
+  const recentQuizzes = dashboard?.recent_quizzes ?? [];
+  const courseMastery = dashboard?.course_mastery ?? [];
 
-  const quizData =
-    quizFilter === "week"
-      ? weeklyQuizPerformance
-      : monthlyQuizPerformance;
+  if (dashboardLoading) return <LoadingState />;
+
+  if (dashboardError) {
+    return <ErrorState onRetry={() => refetchDashboard()} />;
+  }
+
+  const stats = [
+    {
+      label: "Quizzes completed",
+      value: summary?.quizzes_completed ?? 0,
+      detail: "Total completed quizzes",
+      icon: FiCheckCircle,
+    },
+    {
+      label: "Average score",
+      value: formatPercentage(summary?.average_score),
+      detail: "Average across completed quizzes",
+      icon: FiTrendingUp,
+    },
+    {
+      label: "Questions answered",
+      value: summary?.questions_answered ?? 0,
+      detail: "Questions attempted in quizzes",
+      icon: FiBookOpen,
+    },
+    {
+      label: "Overall accuracy",
+      value: formatPercentage(summary?.overall_accuracy),
+      detail: "Correct answers against assigned questions",
+      icon: FiTarget,
+    },
+  ];
 
   return (
     <div className="mx-auto max-w-[1440px] space-y-7">
-      {/* Page heading */}
       <section>
         <p className="text-xs font-medium text-muted">
           YOUR LEARNING JOURNEY
         </p>
+
         <div className="mt-1 flex flex-wrap items-center justify-between gap-3">
           <div>
             <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
               Your Progress
             </h1>
             <p className="mt-2 text-sm text-muted">
-              Understand your performance, track your growth, and identify
-              areas to improve.
+              Track your quiz performance and understand your topic mastery.
             </p>
           </div>
 
@@ -460,57 +691,44 @@ export default function Progress() {
         </div>
       </section>
 
-      {/* Overview stats */}
       <section className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {mockProgressStats.map((item) => (
-          <StatCard key={item.label} item={item} />
+        {stats.map((item) => (
+          <StatCard key={item.label} {...item} />
         ))}
       </section>
 
-      {/* Charts */}
       <section className="grid grid-cols-1 gap-5 xl:grid-cols-2">
         <ChartCard
-          title="Learning activity"
-          description="Time spent learning over the selected period."
-          data={activityData}
-          dataKey="hours"
-          color="var(--color-brand)"
-          filter={activityFilter}
-          onFilterChange={setActivityFilter}
-        />
+          title="Quiz performance"
+          description="Your scores across your latest completed quizzes."
+        >
+          <QuizPerformanceChart quizzes={recentQuizzes} />
+        </ChartCard>
 
         <ChartCard
-          title="Quiz performance"
-          description="Your average quiz scores over time."
-          data={quizData}
-          dataKey="score"
-          color="var(--color-success)"
-          type="line"
-          filter={quizFilter}
-          onFilterChange={setQuizFilter}
-          suffix="%"
-        />
+          title="Answer distribution"
+          description="Correct and incorrect answers across your latest completed quizzes."
+        >
+          <AnswerDistributionChart quizzes={recentQuizzes} />
+        </ChartCard>
       </section>
 
-      {/* Course mastery */}
-      <CourseMastery />
+      <CourseMastery courses={courseMastery} />
 
-      {/* Insights */}
-      <LearningInsights />
+      <LearningHistory
+        quizzes={recentQuizzes}
+        courses={courseMastery}
+      />
 
-      {/* History */}
-      <LearningHistory />
-
-      {/* Footer note */}
       <div className="flex items-start gap-3 rounded-card border border-border bg-brand-wash/40 p-4">
-        <FiZap className="mt-0.5 shrink-0 text-brand-hover" size={18} />
+        <FiAward className="mt-0.5 shrink-0 text-brand-hover" size={18} />
         <div>
           <p className="text-sm font-semibold text-foreground">
             Keep building your momentum
           </p>
           <p className="mt-1 text-xs leading-5 text-muted">
-            Consistent learning and regular practice are the keys to
-            long-term mastery. Focus on improving one topic at a time.
+            Regular practice helps you strengthen your understanding.
+            Review topics with lower mastery and keep testing your knowledge.
           </p>
         </div>
       </div>

@@ -3,16 +3,6 @@ import { Link } from "react-router-dom";
 import { FiBookOpen, FiChevronRight, FiLayers } from "react-icons/fi";
 
 export default function CourseHeader({ course }) {
-  const completed = course.completedTopics ?? 24;
-  const total = course.totalTopics ?? 28;
-
-  const tags = course.tags ?? [
-    "DSA",
-    "Problem Solving",
-    "Programming",
-    "Beginner to Advanced",
-  ];
-
   return (
     <section className="relative overflow-hidden rounded-panel border border-brand-soft bg-gradient-to-br from-brand-wash via-brand-soft/60 to-surface">
       <div className="flex flex-wrap items-center gap-2 px-5 pt-4 text-xs text-muted sm:px-7">
@@ -43,29 +33,20 @@ export default function CourseHeader({ course }) {
               {course.name}
             </h1>
 
-            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-2 text-xs text-muted sm:text-sm">
+            <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted sm:text-sm">
               <span className="rounded-lg bg-success/10 px-2.5 py-1 font-semibold text-success">
                 Enrolled
               </span>
-              <span>{completed}/{total} topics</span>
-              <span className="hidden text-border sm:inline">•</span>
-              <span>Last activity {course.lastActivity ?? "2 days ago"}</span>
+              <span className="font-semibold text-foreground">
+                {course.code}
+              </span>
+              <span>{course.totalTopics} topics</span>
             </div>
 
             <p className="mt-4 max-w-3xl text-sm leading-6 text-muted">
-              {course.description}
+              Explore course topics, practice with quizzes, and track your
+              learning mastery.
             </p>
-
-            <div className="mt-4 flex flex-wrap gap-2">
-              {tags.map((tag) => (
-                <span
-                  key={tag}
-                  className="rounded-lg border border-brand-soft bg-surface/70 px-3 py-1.5 text-xs font-medium text-foreground"
-                >
-                  {tag}
-                </span>
-              ))}
-            </div>
           </div>
         </div>
       </div>

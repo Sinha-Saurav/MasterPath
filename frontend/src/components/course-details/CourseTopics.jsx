@@ -2,77 +2,40 @@
 import { useMemo, useState } from "react";
 import {
   FiBookOpen,
-  FiCheck,
   FiChevronRight,
   FiCircle,
-  FiClock,
-  FiPlay,
   FiSearch,
-  FiVideo,
-  FiFileText,
 } from "react-icons/fi";
-
-const defaultTopics = [
-  { id: "ds-intro", title: "What are Data Structures?", category: "Introduction to DSA", duration: 12, status: "completed" },
-  { id: "ds-types", title: "Types of Data Structures", category: "Introduction to DSA", duration: 15, status: "completed" },
-  { id: "ds-complexity", title: "Time and Space Complexity", category: "Introduction to DSA", duration: 18, status: "completed" },
-  { id: "array-intro", title: "Introduction to Arrays", category: "Arrays", duration: 14, status: "completed" },
-  { id: "array-ops", title: "Array Operations", category: "Arrays", duration: 16, status: "completed" },
-  { id: "two-pointer", title: "Two Pointer Technique", category: "Arrays", duration: 20, status: "completed" },
-  { id: "sliding-window", title: "Sliding Window", category: "Arrays", duration: 25, status: "in-progress" },
-  { id: "array-problems", title: "Common Array Problems", category: "Arrays", duration: 30, status: "not-started" },
-  { id: "ll-intro", title: "Introduction to Linked Lists", category: "Linked Lists", duration: 15, status: "completed" },
-  { id: "ll-operations", title: "Insertion and Deletion", category: "Linked Lists", duration: 20, status: "completed" },
-  { id: "ll-reversal", title: "Reversing a Linked List", category: "Linked Lists", duration: 25, status: "in-progress" },
-  { id: "ll-problems", title: "Linked List Problems", category: "Linked Lists", duration: 30, status: "not-started" },
-  { id: "stack-intro", title: "Introduction to Stacks", category: "Stacks and Queues", duration: 15, status: "not-started" },
-  { id: "queue-intro", title: "Introduction to Queues", category: "Stacks and Queues", duration: 15, status: "not-started" },
-  { id: "tree-intro", title: "Introduction to Trees", category: "Trees", duration: 20, status: "not-started" },
-  { id: "graph-intro", title: "Introduction to Graphs", category: "Graphs", duration: 20, status: "not-started" },
-];
 
 const filters = [
   { value: "all", label: "All Topics" },
-  { value: "completed", label: "Completed" },
-  { value: "in-progress", label: "In Progress" },
-  { value: "not-started", label: "Not Started" },
+  { value: "assessed", label: "Assessed" },
+  { value: "not-assessed", label: "Not Assessed" },
 ];
 
-function TopicStatus({ status }) {
-  if (status === "completed") {
-    return (
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-success/10 text-success">
-        <FiCheck size={18} strokeWidth={3} />
-      </span>
-    );
-  }
-
-  if (status === "in-progress") {
-    return (
-      <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-brand-soft text-brand">
-        <FiPlay size={15} fill="currentColor" />
-      </span>
-    );
-  }
-
-  return (
-    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-app text-muted">
-      <FiCircle size={18} />
-    </span>
-  );
-}
-
 function TopicRow({ topic, onTopicAction }) {
-  const actionLabel =
-    topic.status === "completed"
-      ? "Review topic"
-      : topic.status === "in-progress"
-        ? "Continue learning"
-        : "Start learning";
+  const assessed = topic.status === "assessed";
+  const masteryScore = topic.masteryScore;
+  const masteryValue =
+    masteryScore === null || masteryScore === undefined
+      ? 0
+      : Math.min(100, Math.max(0, masteryScore));
 
   return (
-    <article className="flex flex-col gap-3 rounded-xl border border-border/70 bg-surface p-4 transition hover:border-brand/40 hover:shadow-sm sm:flex-row sm:items-center">
-      <TopicStatus status={topic.status} />
+    <article className="flex flex-col gap-4 rounded-xl border border-border/70 bg-surface p-4 transition hover:border-brand/40 hover:shadow-sm sm:flex-row sm:items-center">
+      <span
+        className={`flex size-9 shrink-0 items-center justify-center rounded-full ${
+          assessed
+            ? "bg-success/10 text-success"
+            : "bg-app text-muted"
+        }`}
+      >
+        {assessed ? (
+          <span className="text-xs font-bold">✓</span>
+        ) : (
+          <FiCircle size={18} />
+        )}
+      </span>
 
       <div className="min-w-0 flex-1">
         <h3 className="font-heading text-sm font-semibold text-foreground">
@@ -83,52 +46,49 @@ function TopicRow({ topic, onTopicAction }) {
           <span className="rounded-md bg-brand-wash px-2 py-1 text-brand-hover">
             {topic.category}
           </span>
-          <span className="inline-flex items-center gap-1">
-            <FiClock size={13} />
-            {topic.duration} min
-          </span>
-          <span>
-            {topic.status === "completed"
-              ? "Completed"
-              : topic.status === "in-progress"
-                ? "In progress"
-                : "Not started"}
-          </span>
+          <span>{assessed ? "Assessed" : "Not assessed"}</span>
+          {assessed && (
+            <span className="font-semibold text-brand-hover">
+              {masteryScore}% mastery
+            </span>
+          )}
+        </div>
+
+        <div className="mt-3">
+          <div className="mb-1.5 flex items-center justify-between gap-3">
+            <span className="text-[11px] font-medium text-muted">
+              Topic mastery
+            </span>
+            <span className="text-[11px] font-semibold text-foreground">
+              {assessed ? `${masteryScore}%` : "Not assessed"}
+            </span>
+          </div>
+
+          <div
+            className="h-2 overflow-hidden rounded-full bg-brand-soft/70"
+            role="progressbar"
+            aria-label={`${topic.title} mastery`}
+            aria-valuenow={masteryValue}
+            aria-valuemin={0}
+            aria-valuemax={100}
+          >
+            <div
+              className="h-full rounded-full bg-brand transition-[width] duration-500"
+              style={{ width: `${masteryValue}%` }}
+            />
+          </div>
         </div>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2 sm:shrink-0">
-        <button
-          type="button"
-          onClick={() => onTopicAction?.("video", topic)}
-          aria-label={`Open videos for ${topic.title}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted transition hover:border-brand hover:bg-brand-wash hover:text-brand-hover"
-        >
-          <FiVideo size={14} />
-          Videos
-        </button>
-
-        <button
-          type="button"
-          onClick={() => onTopicAction?.("notes", topic)}
-          aria-label={`Open notes for ${topic.title}`}
-          className="inline-flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs font-medium text-muted transition hover:border-brand hover:bg-brand-wash hover:text-brand-hover"
-        >
-          <FiFileText size={14} />
-          Notes
-        </button>
-
+      <div className="sm:shrink-0">
         <button
           type="button"
           onClick={() =>
-            onTopicAction?.(
-              topic.status === "completed" ? "review" : "continue",
-              topic
-            )
+            onTopicAction?.(assessed ? "review" : "continue", topic)
           }
-          className="inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-3 py-2 text-xs font-semibold text-white transition hover:bg-brand-hover"
+          className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-brand px-3 py-2.5 text-xs font-semibold text-white transition hover:bg-brand-hover sm:w-auto"
         >
-          {actionLabel}
+          {assessed ? "Review topic" : "Start learning"}
           <FiChevronRight size={14} />
         </button>
       </div>
@@ -136,19 +96,17 @@ function TopicRow({ topic, onTopicAction }) {
   );
 }
 
-export default function CourseTopics({
-  topics = defaultTopics,
-  onTopicAction,
-}) {
+export default function CourseTopics({ topics = [], onTopicAction }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
 
   const counts = useMemo(
     () => ({
       total: topics.length,
-      completed: topics.filter((topic) => topic.status === "completed").length,
-      inProgress: topics.filter((topic) => topic.status === "in-progress").length,
-      notStarted: topics.filter((topic) => topic.status === "not-started").length,
+      assessed: topics.filter((topic) => topic.status === "assessed").length,
+      notAssessed: topics.filter(
+        (topic) => topic.status === "not-assessed"
+      ).length,
     }),
     [topics]
   );
@@ -176,7 +134,7 @@ export default function CourseTopics({
             Course Topics
           </h2>
           <p className="mt-1 text-sm text-muted">
-            Choose a topic to study, review notes, or watch lessons.
+            Track your mastery and continue learning topic by topic.
           </p>
         </div>
 
@@ -211,12 +169,11 @@ export default function CourseTopics({
         </div>
       </div>
 
-      <div className="mt-5 grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <div className="mt-5 grid grid-cols-1 gap-3 sm:grid-cols-3">
         {[
           { label: "Total topics", value: counts.total },
-          { label: "Completed", value: counts.completed },
-          { label: "In progress", value: counts.inProgress },
-          { label: "Not started", value: counts.notStarted },
+          { label: "Assessed", value: counts.assessed },
+          { label: "Not assessed", value: counts.notAssessed },
         ].map((item) => (
           <div
             key={item.label}
