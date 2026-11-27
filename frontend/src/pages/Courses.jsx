@@ -1,6 +1,10 @@
 
 import { useEffect, useMemo, useState } from "react";
-import { FiSearch, FiRefreshCw, FiAlertCircle } from "react-icons/fi";
+import {
+  FiSearch,
+  FiRefreshCw,
+  FiAlertCircle,
+} from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
 
 import api from "../services/api";
@@ -15,6 +19,9 @@ export default function Courses() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [retry, setRetry] = useState(0);
+
+  const [deEnrollingId, setDeEnrollingId] = useState(null);
+  const [deEnrollError, setDeEnrollError] = useState("");
 
   // Fetch only the logged-in student's enrolled courses
   useEffect(() => {
@@ -67,6 +74,34 @@ export default function Courses() {
     navigate(`/courses/${course.id}`);
   }
 
+  // De-enroll from a course
+  async function handleDeEnroll(course) {
+    const confirmed = window.confirm(
+      `Are you sure you want to de-enroll from "${course.name}"?\n\nYou will no longer see this course in your enrolled courses.`
+    );
+
+    if (!confirmed) return;
+
+    try {
+      setDeEnrollingId(course.id);
+      setDeEnrollError("");
+
+      await api.delete(`/courses/${course.id}/enroll`);
+
+      // Remove the course from the current list
+      setCourses((previousCourses) =>
+        previousCourses.filter((item) => item.id !== course.id)
+      );
+    } catch (err) {
+      setDeEnrollError(
+        err.response?.data?.error?.message ||
+          `Unable to de-enroll from ${course.name}. Please try again.`
+      );
+    } finally {
+      setDeEnrollingId(null);
+    }
+  }
+
   return (
     <div className="mx-auto max-w-[1600px] space-y-5">
       <CoursesHero />
@@ -104,6 +139,17 @@ export default function Courses() {
         )}
       </div>
 
+      {/* De-enrollment error */}
+      {deEnrollError && (
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-xl border border-danger/20 bg-danger/5 px-4 py-3 text-sm text-danger"
+        >
+          <FiAlertCircle size={17} className="shrink-0" />
+          {deEnrollError}
+        </div>
+      )}
+
       {/* Loading */}
       {loading && (
         <div className="flex min-h-64 items-center justify-center rounded-panel border border-border bg-surface">
@@ -114,7 +160,7 @@ export default function Courses() {
         </div>
       )}
 
-      {/* Error */}
+      {/* Fetch error */}
       {!loading && error && (
         <div className="flex min-h-64 flex-col items-center justify-center rounded-panel border border-border bg-surface px-6 py-10 text-center">
           <FiAlertCircle size={28} className="text-danger" />
@@ -144,6 +190,8 @@ export default function Courses() {
                 key={course.id}
                 course={course}
                 onContinue={openCourse}
+                onDeEnroll={handleDeEnroll}
+                isDeEnrolling={deEnrollingId === course.id}
               />
             ))
           ) : (

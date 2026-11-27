@@ -5,7 +5,7 @@ export async function getMe(req, res, next) {
   try {
     const { data, error } = await supabase
       .from("profiles")
-      .select("id, full_name, role, branch, semester")
+      .select("id, full_name, role, branch, semester, avatar_id")
       .eq("id", req.user.id)
       .single();
 
@@ -53,7 +53,7 @@ export async function updateMe(req, res, next) {
       });
     }
 
-    const allowedFields = ["full_name", "branch", "semester"];
+    const allowedFields = ["full_name", "branch", "semester", "avatar_id"];
     const updates = { ...req.body };
 
     // 1. Validate the request body.
@@ -132,12 +132,39 @@ export async function updateMe(req, res, next) {
       }
     }
 
+    // 6. Validate avatar_id.
+if ("avatar_id" in updates) {
+  const validAvatars = [
+    "av1",
+    "av2",
+    "av3",
+    "av4",
+    "av5",
+    "av6",
+    "av7",
+    "av8",
+    "av9",
+  ];
+
+  if (
+    typeof updates.avatar_id !== "string" ||
+    !validAvatars.includes(updates.avatar_id)
+  ) {
+    return res.status(400).json({
+      error: {
+        code: "INVALID_AVATAR",
+        message: "Please select a valid avatar.",
+      },
+    });
+  }
+}
+
     // 6. Update only the authenticated student's profile.
     const { data, error } = await supabase
       .from("profiles")
       .update(updates)
       .eq("id", req.user.id)
-      .select("id, full_name, role, branch, semester")
+      .select("id, full_name, role, branch, semester, avatar_id")
       .maybeSingle();
 
     if (error) {

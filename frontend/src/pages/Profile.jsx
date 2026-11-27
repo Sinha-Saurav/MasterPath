@@ -10,8 +10,11 @@ import {
   FiCheck,
   FiX,
   FiRefreshCw,
+  FiShield,
 } from "react-icons/fi";
+
 import api from "../services/api";
+import { AVATARS, DEFAULT_AVATAR_ID } from "../constants/avatars";
 
 const inputClass =
   "w-full rounded-xl border border-border bg-app px-4 py-3 text-sm text-foreground outline-none transition placeholder:text-muted focus:border-brand focus:ring-4 focus:ring-focus/30";
@@ -63,7 +66,9 @@ function ProfileField({
               Icon ? "pl-10" : ""
             }`}
           >
-            {value || <span className="text-muted">Not provided</span>}
+            {value || (
+              <span className="text-muted">Not provided</span>
+            )}
           </div>
         )}
       </div>
@@ -87,6 +92,10 @@ export default function Profile() {
   const [draft, setDraft] = useState(null);
   const [saveSuccess, setSaveSuccess] = useState(false);
 
+  // Temporary avatar selection.
+  const [avatarDraft, setAvatarDraft] = useState(null);
+  const [avatarSuccess, setAvatarSuccess] = useState(false);
+
   // Fetch actual profile data.
   const {
     data: profile,
@@ -102,17 +111,40 @@ export default function Profile() {
     },
   });
 
-  // Update profile through PATCH /api/me.
+  // Update personal information.
   const updateMutation = useMutation({
     mutationFn: async (updates) => {
       const { data } = await api.patch("/me", updates);
       return data;
     },
+
     onSuccess: (updatedProfile) => {
-      queryClient.setQueryData(["myProfile"], updatedProfile);
+      queryClient.setQueryData(["myProfile"], (previous) => ({
+        ...previous,
+        ...updatedProfile,
+      }));
+
       setDraft(null);
       setEditing(false);
       setSaveSuccess(true);
+    },
+  });
+
+  // Update avatar independently.
+  const avatarMutation = useMutation({
+    mutationFn: async (avatar_id) => {
+      const { data } = await api.patch("/me", { avatar_id });
+      return data;
+    },
+
+    onSuccess: (updatedProfile) => {
+      queryClient.setQueryData(["myProfile"], (previous) => ({
+        ...previous,
+        ...updatedProfile,
+      }));
+
+      setAvatarDraft(null);
+      setAvatarSuccess(true);
     },
   });
 
@@ -152,6 +184,11 @@ export default function Profile() {
     const branch = draft.branch.trim();
     const semester = Number(draft.semester);
 
+    if (!fullName) {
+      updateMutation.reset();
+      return;
+    }
+
     if (fullName !== (profile.full_name || "")) {
       updates.full_name = fullName;
     }
@@ -164,7 +201,6 @@ export default function Profile() {
       updates.semester = semester;
     }
 
-    // Avoid sending an empty PATCH request.
     if (Object.keys(updates).length === 0) {
       setEditing(false);
       setDraft(null);
@@ -172,6 +208,27 @@ export default function Profile() {
     }
 
     updateMutation.mutate(updates);
+  };
+
+  // Avatar selection handlers.
+  const savedAvatarId = profile.avatar_id || DEFAULT_AVATAR_ID;
+  const selectedAvatarId = avatarDraft ?? savedAvatarId;
+  const currentAvatar =
+  AVATARS.find((avatar) => avatar.id === savedAvatarId) ||
+  AVATARS[0];
+
+  const handleAvatarSelect = (avatarId) => {
+    setAvatarDraft(
+      avatarId === savedAvatarId ? null : avatarId
+    );
+
+    setAvatarSuccess(false);
+    avatarMutation.reset();
+  };
+
+  const handleAvatarSave = () => {
+    if (!avatarDraft) return;
+    avatarMutation.mutate(avatarDraft);
   };
 
   const initials = (profile?.full_name || "S")
@@ -191,7 +248,7 @@ export default function Profile() {
       <div className="flex min-h-[50vh] items-center justify-center">
         <div className="flex items-center gap-3 text-sm text-muted">
           <FiRefreshCw className="animate-spin" size={18} />
-          Loading your profile...
+          Loading your account...
         </div>
       </div>
     );
@@ -201,7 +258,7 @@ export default function Profile() {
     return (
       <div className="mx-auto max-w-2xl rounded-2xl border border-border bg-surface p-8 text-center">
         <h2 className="font-heading text-lg font-bold text-foreground">
-          Couldn't load your profile
+          Couldn't load your account
         </h2>
 
         <p className="mt-2 text-sm text-muted">
@@ -230,11 +287,11 @@ export default function Profile() {
           </p>
 
           <h1 className="font-heading text-2xl font-bold tracking-tight text-foreground sm:text-3xl">
-            My Profile
+            Account Overview
           </h1>
 
           <p className="mt-2 text-sm text-muted">
-            View and manage your personal and academic information.
+            Manage your personal information and account details.
           </p>
         </div>
 
@@ -276,6 +333,7 @@ export default function Profile() {
         )}
       </div>
 
+      {/* Personal information success */}
       {saveSuccess && (
         <div className="flex items-center gap-2 rounded-xl border border-success/20 bg-success/10 px-4 py-3 text-sm text-success">
           <FiCheck size={17} />
@@ -283,8 +341,12 @@ export default function Profile() {
         </div>
       )}
 
+      {/* Personal information error */}
       {updateMutation.isError && (
-        <div className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500">
+        <div
+          role="alert"
+          className="flex items-center gap-2 rounded-xl border border-red-500/20 bg-red-500/10 px-4 py-3 text-sm text-red-500"
+        >
           {getErrorMessage(updateMutation.error)}
         </div>
       )}
@@ -294,9 +356,13 @@ export default function Profile() {
         <div className="absolute right-0 top-0 h-40 w-40 rounded-full bg-brand-soft/50 blur-3xl" />
 
         <div className="relative flex flex-col gap-5 sm:flex-row sm:items-center">
-          <div className="flex h-20 w-20 shrink-0 items-center justify-center rounded-2xl bg-brand-soft font-heading text-2xl font-bold text-brand-hover">
-            {initials || "S"}
-          </div>
+          <div className="h-20 w-20 shrink-0 overflow-hidden rounded-2xl bg-brand-soft">
+  <img
+    src={currentAvatar.src}
+    alt="Profile avatar"
+    className="h-full w-full object-contain"
+  />
+</div>
 
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
@@ -330,11 +396,89 @@ export default function Profile() {
         </div>
       </section>
 
+      {/* Avatar selector */}
+      <section className="rounded-2xl border border-border bg-surface px-5 py-4 sm:px-6">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div>
+            <h2 className="text-sm font-bold text-foreground">
+              Choose your avatar
+            </h2>
+            <p className="mt-1 text-xs text-muted">
+              Pick an avatar to personalize your account.
+            </p>
+          </div>
+
+          {avatarDraft && (
+            <button
+              type="button"
+              onClick={handleAvatarSave}
+              disabled={avatarMutation.isPending}
+              className="flex h-9 items-center justify-center gap-2 self-start rounded-xl bg-brand px-4 text-xs font-semibold text-white transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-60 sm:self-auto"
+            >
+              {avatarMutation.isPending ? (
+                <FiRefreshCw className="animate-spin" size={14} />
+              ) : (
+                <FiCheck size={15} />
+              )}
+              {avatarMutation.isPending ? "Saving..." : "Save Avatar"}
+            </button>
+          )}
+        </div>
+
+        {/* Horizontal avatar strip */}
+        <div className="mt-4 flex gap-3 overflow-x-auto pb-2">
+          {AVATARS.map((avatar) => {
+            const isSelected = selectedAvatarId === avatar.id;
+
+            return (
+              <button
+                key={avatar.id}
+                type="button"
+                onClick={() => handleAvatarSelect(avatar.id)}
+                disabled={avatarMutation.isPending}
+                aria-label={`Choose avatar ${avatar.id}`}
+                aria-pressed={isSelected}
+                className={`relative h-[58px] w-[58px] shrink-0 overflow-hidden rounded-xl border-2 bg-app transition-all duration-200 hover:-translate-y-0.5 hover:border-brand/60 disabled:cursor-not-allowed disabled:opacity-60 ${
+                  isSelected
+                    ? "border-brand bg-brand-wash shadow-sm"
+                    : "border-border"
+                }`}
+              >
+                <img
+                  src={avatar.src}
+                  alt=""
+                  className="h-full w-full object-contain"
+                />
+
+                {isSelected && (
+                  <span className="absolute right-0.5 top-0.5 flex h-4 w-4 items-center justify-center rounded-full bg-brand text-white">
+                    <FiCheck size={10} />
+                  </span>
+                )}
+              </button>
+            );
+          })}
+        </div>
+
+        {avatarMutation.isError && (
+          <p role="alert" className="mt-2 text-xs text-red-500">
+            {getErrorMessage(avatarMutation.error)}
+          </p>
+        )}
+
+        {avatarSuccess && (
+          <p className="mt-2 flex items-center gap-1.5 text-xs text-success">
+            <FiCheck size={14} />
+            Avatar updated successfully.
+          </p>
+        )}
+      </section>
+
       {/* Personal information */}
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <SectionHeading
           title="Personal Information"
-          description="Your account and academic details."
+          description="Update your personal and academic details."
         />
 
         <div className="grid grid-cols-1 gap-5 sm:grid-cols-2">
@@ -400,15 +544,15 @@ export default function Profile() {
       <section className="rounded-2xl border border-border bg-surface p-5 sm:p-7">
         <SectionHeading
           title="Account Information"
-          description="Your MasterPath account details."
+          description="Information associated with your MasterPath account."
         />
 
         <div className="flex items-center gap-4">
           <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-brand-wash text-brand">
-            <FiUser size={18} />
+            <FiShield size={18} />
           </div>
 
-          <div className="flex-1">
+          <div className="min-w-0 flex-1">
             <p className="text-sm font-semibold text-foreground">
               Account Role
             </p>

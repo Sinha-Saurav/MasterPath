@@ -27,7 +27,6 @@ const navigation = [
 
 const secondaryNavigation = [
   { label: "Explore Courses", path: "/courses/explore", icon: FiCompass },
-  { label: "My Profile", path: "/profile", icon: FiUser },
   { label: "Settings", path: "/settings", icon: FiSettings },
 ];
 

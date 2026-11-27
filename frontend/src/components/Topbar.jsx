@@ -1,9 +1,41 @@
 
 import { FiBell, FiMenu, FiSearch } from "react-icons/fi";
 import { useNavigate } from "react-router-dom";
+import { useQuery } from "@tanstack/react-query";
+
+import api from "../services/api";
+import { AVATARS, DEFAULT_AVATAR_ID } from "../constants/avatars";
 
 export default function Topbar({ onMenuClick }) {
   const navigate = useNavigate();
+
+  const { data: profile } = useQuery({
+    queryKey: ["myProfile"],
+    queryFn: async () => {
+      const response = await api.get("/me");
+      return response.data;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const fullName = profile?.full_name || "Student";
+
+  const initials = fullName
+    .trim()
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0].toUpperCase())
+    .join("");
+
+  const role = profile?.role
+    ? profile.role.charAt(0).toUpperCase() + profile.role.slice(1)
+    : "Learner";
+
+  const avatarId = profile?.avatar_id || DEFAULT_AVATAR_ID;
+
+  const currentAvatar =
+    AVATARS.find((avatar) => avatar.id === avatarId) || AVATARS[0];
 
   return (
     <header className="sticky top-0 z-30 flex h-[76px] items-center justify-between gap-4 border-b border-border bg-surface/95 px-4 backdrop-blur-sm sm:px-6 lg:px-8">
@@ -43,16 +75,23 @@ export default function Topbar({ onMenuClick }) {
 
         <button
           type="button"
-          onClick={() => navigate("/profile")}
+          onClick={() => navigate("/settings")}
+          aria-label="Open profile"
           className="flex items-center gap-2 rounded-xl p-1.5 transition hover:bg-brand-wash sm:gap-3"
         >
-          <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-brand-soft text-sm font-bold text-brand-hover">
-            S
+          <div className="h-9 w-9 overflow-hidden rounded-xl bg-brand-soft">
+            <img
+              src={currentAvatar.src}
+              alt="Profile avatar"
+              className="h-full w-full object-contain"
+            />
           </div>
 
           <div className="hidden text-left sm:block">
-            <p className="text-xs font-semibold text-foreground">Student</p>
-            <p className="text-[11px] text-muted">Learner account</p>
+            <p className="max-w-[140px] truncate text-xs font-semibold text-foreground">
+              {fullName}
+            </p>
+            <p className="text-[11px] text-muted">{role}</p>
           </div>
         </button>
       </div>

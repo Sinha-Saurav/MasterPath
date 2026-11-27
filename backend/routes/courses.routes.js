@@ -8,12 +8,17 @@ import {
     unenrollFromCourse,
 } from "../controllers/courses.controller.js";
 
+import {
+    getTopicVideos,
+} from "../controllers/topicVideos.controller.js";
+
 const router = Router();
 
 router.use(authenticate);
 
 router.get("/", getCourses);
 router.get("/:id/topics", getCourseTopics);
+router.get("/:id/topics/:topicId/videos", getTopicVideos);
 router.post("/:id/enroll", enrollInCourse);
 router.delete("/:id/enroll", unenrollFromCourse);
 

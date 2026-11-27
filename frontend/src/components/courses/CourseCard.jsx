@@ -6,8 +6,9 @@ import {
   FiGitBranch,
   FiMonitor,
   FiSettings,
-  FiMoreHorizontal,
   FiPlay,
+  FiLogOut,
+  FiLoader,
 } from "react-icons/fi";
 
 const iconMap = {
@@ -19,7 +20,12 @@ const iconMap = {
   cloud: FiCloud,
 };
 
-export default function CourseCard({ course, onContinue, onMenu }) {
+export default function CourseCard({
+  course,
+  onContinue,
+  onDeEnroll,
+  isDeEnrolling = false,
+}) {
   const Icon = iconMap[course.icon] || FiBookOpen;
 
   return (
@@ -42,28 +48,19 @@ export default function CourseCard({ course, onContinue, onMenu }) {
             {course.name}
           </h3>
         </div>
-
-        {onMenu && (
-          <button
-            type="button"
-            aria-label={`More options for ${course.name}`}
-            onClick={() => onMenu(course)}
-            className="shrink-0 rounded-lg p-1 text-muted transition hover:bg-brand-wash hover:text-brand-hover"
-          >
-            <FiMoreHorizontal size={19} />
-          </button>
-        )}
       </div>
 
       <div className="mt-5 flex items-center justify-between gap-2">
         <span className="text-xs text-muted">
           {course.topic_count ?? 0} Topics
         </span>
+
         <span className="text-xs font-semibold text-brand-hover">
           Enrolled
         </span>
       </div>
 
+      {/* Continue learning */}
       <button
         type="button"
         onClick={() => onContinue(course)}
@@ -71,6 +68,26 @@ export default function CourseCard({ course, onContinue, onMenu }) {
       >
         <FiPlay size={15} />
         Continue Learning
+      </button>
+
+      {/* De-enroll */}
+      <button
+        type="button"
+        onClick={() => onDeEnroll(course)}
+        disabled={isDeEnrolling}
+        className="mt-2 flex h-9 w-full items-center justify-center gap-2 rounded-xl border border-border bg-transparent px-3 text-xs font-medium text-muted transition hover:border-danger/40 hover:bg-danger/5 hover:text-danger disabled:cursor-not-allowed disabled:opacity-60"
+      >
+        {isDeEnrolling ? (
+          <>
+            <FiLoader className="animate-spin" size={14} />
+            De-enrolling...
+          </>
+        ) : (
+          <>
+            <FiLogOut size={14} />
+            De-enroll
+          </>
+        )}
       </button>
     </article>
   );

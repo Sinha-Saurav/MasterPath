@@ -11,7 +11,6 @@ import QuizResults from "./pages/QuizResults";
 import Progress from "./pages/Progress";
 import AITutor from "./pages/AITutor";
 import Profile from "./pages/Profile";
-import Settings from "./pages/Settings";
 import ExploreCourses from "./pages/ExploreCourses";
 
 import { Login } from "./pages/AuthPages/Login";
@@ -48,8 +47,7 @@ export default function App() {
         <Route path="/quizzes/:quizId/attempt" element={<QuizAttempt />} />
         <Route path="/quizzes/:quizId/results" element={<QuizResults />} />
         <Route path="/progress" element={<Progress />} />
-        <Route path="/profile" element={<Profile />} />
-        <Route path="/settings" element={<Settings />} />
+        <Route path="/settings" element={<Profile />} />
       </Route>
 
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
